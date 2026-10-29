@@ -60,3 +60,11 @@ This version exposes `/health` and `/` on `PORT` while Telegram polling runs. Se
 - Saving a panel URL does not automatically integrate its private API; API documentation and authorization are required.
 - Users can save their own/authorized QA test numbers for 24 hours. Expired saved entries are removed when the list is opened.
 - This build does not fetch or redistribute third-party login OTPs/SMS. Real incoming-message integration must be connected to an authorized inbox endpoint with per-user access control.
+
+
+## Backup and cleanup additions
+- Owner panel now has dead-source cleanup candidates for Firebase URLs and custom panel links. Removal is manual; HTTP/permission failures can be temporary.
+- Custom panel check tests only HTTPS page reachability/status; it does not infer undocumented API endpoints or fetch SMS records.
+- Owner can export a JSON settings backup and restore it by sending the JSON file to the bot. A local `.bak` copy is also maintained.
+- Render Free storage is ephemeral across some redeploys/replacements. Download backups and store them outside Render; local `.bak` alone is not durable cloud backup.
+- `re` import is included for test-number validation.

@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -37,21 +38,41 @@ def defaults():
     }
 
 def load_data():
+    # Recover from a damaged main file using the last local snapshot.
     if DATA_FILE.exists():
         try:
             data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
             for k, v in defaults().items():
                 data.setdefault(k, v)
             return data
-        except (OSError, json.JSONDecodeError) as exc:
-            log.exception("Could not load data: %s", exc)
+        except (OSError, json.JSONDecodeError):
+            log.exception("Could not load data; trying local backup")
+    backup = DATA_FILE.with_suffix(DATA_FILE.suffix + ".bak")
+    if backup.exists():
+        try:
+            data = json.loads(backup.read_text(encoding="utf-8"))
+            for k, v in defaults().items():
+                data.setdefault(k, v)
+            save_data(data)
+            return data
+        except (OSError, json.JSONDecodeError):
+            log.exception("Local backup could not be loaded")
     data = defaults()
     save_data(data)
     return data
 
 def save_data(data):
     temp = DATA_FILE.with_suffix(".tmp")
-    temp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    payload = json.dumps(data, indent=2, ensure_ascii=False)
+    # Keep previous valid version before replacing the main JSON.
+    if DATA_FILE.exists():
+        try:
+            current = DATA_FILE.read_text(encoding="utf-8")
+            json.loads(current)
+            DATA_FILE.with_suffix(DATA_FILE.suffix + ".bak").write_text(current, encoding="utf-8")
+        except (OSError, json.JSONDecodeError):
+            pass
+    temp.write_text(payload, encoding="utf-8")
     temp.replace(DATA_FILE)
 
 def is_owner(uid, data=None):
@@ -89,6 +110,8 @@ def kb_home(uid, data):
         b.button(text="👥 USERS", callback_data="users")
         b.button(text="⚙️ SETTINGS", callback_data="settings")
         b.button(text="📢 FORCE JOIN HELP", callback_data="forcejoin:help")
+        b.button(text="🧹 CHECK/REMOVE DEAD SOURCES", callback_data="cleanup:menu")
+        b.button(text="💾 BACKUP / RESTORE", callback_data="backup:menu")
     elif is_admin(uid, data):
         b.button(text="📡 LIVE STATUS", callback_data="fb:status")
         b.button(text="📱 ONLINE DEVICES", callback_data="devices")
@@ -288,6 +311,8 @@ async def panel_menu(cq: CallbackQuery):
     b = InlineKeyboardBuilder()
     b.button(text="➕ Add Panel URL", callback_data="panel:add")
     b.button(text="📋 List Panels", callback_data="panel:list")
+    b.button(text="🧪 Check Panel Links", callback_data="panel:check")
+    b.button(text="🗑 Remove Dead Panels", callback_data="panel:dead")
     b.button(text="⬅️ Back", callback_data="home")
     b.adjust(1)
     await cq.message.edit_text(
@@ -328,6 +353,133 @@ async def panel_list(cq: CallbackQuery):
     b.button(text="⬅️ Back", callback_data="panel:menu")
     b.adjust(1)
     await cq.message.edit_text(text, reply_markup=b.as_markup(), parse_mode="HTML", disable_web_page_preview=True)
+    await cq.answer()
+
+@dp.callback_query(F.data == "panel:check")
+async def panel_check(cq: CallbackQuery):
+    data = load_data()
+    if not is_owner(cq.from_user.id, data):
+        await cq.answer("Owner only.", show_alert=True); return
+    items = data.get("panels", [])
+    if not items:
+        await cq.message.edit_text("No custom panels saved.", reply_markup=kb_back("panel:menu")); await cq.answer(); return
+    await cq.answer("Checking panel pages…")
+    lines = ["🌐 <b>Panel URL checks</b> (page reachability only)", ""]
+    timeout = aiohttp.ClientTimeout(total=8)
+    async with aiohttp.ClientSession(timeout=timeout, headers={"User-Agent": "SMS-BOT-HealthCheck/1.0"}) as session:
+        for item in items[:30]:
+            try:
+                async with session.get(item["url"], allow_redirects=True) as resp:
+                    state = "🟢 REACHABLE" if resp.status < 500 else "🔴 SERVER ERROR"
+                    lines.append(f"{state} · <b>{item['label']}</b> · HTTP {resp.status}")
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+                lines.append(f"🔴 <b>{item['label']}</b> · unreachable/timeout")
+    lines.append("\nNote: HTTP page check API/SMS data ko verify nahi karta.")
+    await cq.message.edit_text("\n".join(lines), reply_markup=kb_back("panel:menu"), parse_mode="HTML", disable_web_page_preview=True)
+
+@dp.callback_query(F.data == "panel:dead")
+async def panel_dead(cq: CallbackQuery):
+    data = load_data()
+    if not is_owner(cq.from_user.id, data):
+        await cq.answer("Owner only.", show_alert=True); return
+    items = data.get("panels", [])
+    await cq.answer("Checking panel links…")
+    dead = []
+    timeout = aiohttp.ClientTimeout(total=8)
+    async with aiohttp.ClientSession(timeout=timeout, headers={"User-Agent": "SMS-BOT-HealthCheck/1.0"}) as session:
+        for item in items[:50]:
+            try:
+                async with session.get(item["url"], allow_redirects=True) as resp:
+                    if resp.status >= 500:
+                        dead.append(item)
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+                dead.append(item)
+    b = InlineKeyboardBuilder()
+    for item in dead[:30]:
+        b.button(text=f"🗑 Remove {item['label'][:24]}", callback_data=f"panel:del:{item['id']}")
+    b.button(text="🔄 Recheck", callback_data="panel:dead")
+    b.button(text="⬅️ Back", callback_data="panel:menu")
+    b.adjust(1)
+    msg = "🧹 <b>Unreachable panels</b>\n\n" + ("\n".join(f"• {x['label']}" for x in dead) if dead else "No dead links detected.")
+    msg += "\n\nRemoval is manual; temporary outages can look dead."
+    await cq.message.edit_text(msg, reply_markup=b.as_markup(), parse_mode="HTML")
+
+@dp.callback_query(F.data.startswith("panel:del:"))
+async def panel_delete(cq: CallbackQuery):
+    data = load_data()
+    if not is_owner(cq.from_user.id, data):
+        await cq.answer("Owner only.", show_alert=True); return
+    pid = cq.data.split(":", 2)[2]
+    before = len(data.get("panels", []))
+    data["panels"] = [x for x in data.get("panels", []) if x.get("id") != pid]
+    save_data(data)
+    if len(data["panels"]) < before:
+        await cq.answer("Panel removed.")
+    else:
+        await cq.answer("Panel not found.")
+    # Keep this callback self-contained; the user can tap recheck after removal.
+    await cq.message.edit_text("Panel list updated. Recheck remaining links?", reply_markup=kb_back("panel:menu"))
+
+@dp.callback_query(F.data == "cleanup:menu")
+async def cleanup_menu(cq: CallbackQuery):
+    data = load_data()
+    if not is_owner(cq.from_user.id, data):
+        await cq.answer("Owner only.", show_alert=True); return
+    b = InlineKeyboardBuilder()
+    b.button(text="🔎 Scan Firebase URLs", callback_data="cleanup:firebase")
+    b.button(text="🌐 Check/remove dead panels", callback_data="panel:dead")
+    b.button(text="⬅️ Back", callback_data="home")
+    b.adjust(1)
+    await cq.message.edit_text("🧹 <b>Dead Source Cleanup</b>\n\nScan pehle hoga; delete karne se pehle tumse individual confirmation/button milega.", reply_markup=b.as_markup(), parse_mode="HTML")
+    await cq.answer()
+
+@dp.callback_query(F.data == "cleanup:firebase")
+async def cleanup_firebase(cq: CallbackQuery):
+    data = load_data()
+    if not is_owner(cq.from_user.id, data):
+        await cq.answer("Owner only.", show_alert=True); return
+    await cq.answer("Checking Firebase URLs…")
+    async with aiohttp.ClientSession() as session:
+        statuses = await scan_all_firebase(session, data)
+    dead = [x for x in statuses if x["status"] in ("OFFLINE", "ERROR", "NOT FOUND", "LOCKED")]
+    b = InlineKeyboardBuilder()
+    for item in dead[:30]:
+        b.button(text=f"🗑 Remove {item['label'][:24]}", callback_data=f"fb:del:{item['id']}:0")
+    b.button(text="🔄 Recheck", callback_data="cleanup:firebase")
+    b.button(text="⬅️ Back", callback_data="cleanup:menu")
+    b.adjust(1)
+    body = "\n".join(f"• {x['label']} — {x['status']}" for x in dead) if dead else "No dead/locked URLs detected."
+    await cq.message.edit_text("🧹 <b>Firebase cleanup candidates</b>\n\n" + body + "\n\nLOCKED can mean permissions are needed; remove only if you're sure.", reply_markup=b.as_markup(), parse_mode="HTML")
+
+@dp.callback_query(F.data == "backup:menu")
+async def backup_menu(cq: CallbackQuery):
+    if not is_owner(cq.from_user.id):
+        await cq.answer("Owner only.", show_alert=True); return
+    b = InlineKeyboardBuilder()
+    b.button(text="📤 Export backup JSON", callback_data="backup:export")
+    b.button(text="📥 Restore backup JSON", callback_data="backup:restore")
+    b.button(text="⬅️ Back", callback_data="home")
+    b.adjust(1)
+    await cq.message.edit_text("💾 <b>Settings Backup</b>\n\nExport JSON ko phone/Drive mein safe rakho. Render Free ka filesystem redeploy/restart par reset ho sakta hai; local .bak us case mein enough nahi hota.", reply_markup=b.as_markup(), parse_mode="HTML")
+    await cq.answer()
+
+@dp.callback_query(F.data == "backup:export")
+async def backup_export(cq: CallbackQuery):
+    if not is_owner(cq.from_user.id):
+        await cq.answer("Owner only.", show_alert=True); return
+    data = load_data()
+    backup_path = DATA_FILE.with_name("sms_bot_backup.json")
+    backup_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    from aiogram.types import FSInputFile
+    await cq.message.answer_document(FSInputFile(str(backup_path)), caption="💾 Bot settings backup. Store it securely; it may contain user/configuration data.")
+    await cq.answer("Backup exported.")
+
+@dp.callback_query(F.data == "backup:restore")
+async def backup_restore(cq: CallbackQuery):
+    if not is_owner(cq.from_user.id):
+        await cq.answer("Owner only.", show_alert=True); return
+    pending[cq.from_user.id] = "backup_restore"
+    await cq.message.answer("Apna previously exported <code>.json</code> backup document bhejo. Current settings backup se replace/update hongi.", parse_mode="HTML")
     await cq.answer()
 
 @dp.callback_query(F.data == "numbers:menu")
@@ -464,13 +616,27 @@ async def fb_bulk_help(cq: CallbackQuery):
 
 @dp.message(F.document)
 async def bulk_file(message: Message):
-    if pending.get(message.from_user.id) != "bulk_file" or not is_owner(message.from_user.id):
+    mode = pending.get(message.from_user.id)
+    if not is_owner(message.from_user.id) or mode not in ("bulk_file", "backup_restore"):
         return
-    if not message.document.file_name.lower().endswith(".txt"):
-        await message.answer("Sirf .txt file bhejo."); return
     file = await message.bot.get_file(message.document.file_id)
     stream = await message.bot.download_file(file.file_path)
     raw = stream.read().decode("utf-8", errors="replace")
+    if mode == "backup_restore":
+        try:
+            restored = json.loads(raw)
+            if not isinstance(restored, dict):
+                raise ValueError("backup root must be an object")
+            for key, value in defaults().items():
+                restored.setdefault(key, value)
+            save_data(restored)
+            pending.pop(message.from_user.id, None)
+            await message.answer("✅ Backup restored. Main settings and lists loaded.")
+        except (json.JSONDecodeError, ValueError) as exc:
+            await message.answer(f"❌ Invalid backup JSON: {exc}")
+        return
+    if not message.document.file_name.lower().endswith(".txt"):
+        await message.answer("Sirf .txt file bhejo."); return
     data = load_data()
     existing = {x["url"] for x in data["firebases"]}
     added = skipped = 0
