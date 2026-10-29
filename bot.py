@@ -5,6 +5,7 @@ import os
 import time
 from pathlib import Path
 from urllib.parse import urlparse
+from aiohttp import web
 
 import aiohttp
 from aiogram import Bot, Dispatcher, F
@@ -27,9 +28,11 @@ def defaults():
         "banned": [],
         "users": {},
         "firebases": [],
+        "panels": [],
+        "saved_numbers": {},
         "plans": [],
         "redeem_codes": {},
-        "settings": {"scan_interval": SCAN_INTERVAL},
+        "settings": {"scan_interval": SCAN_INTERVAL, "force_join_channel": None},
         "activity_log": []
     }
 
@@ -77,15 +80,25 @@ def register_user(user):
 
 def kb_home(uid, data):
     b = InlineKeyboardBuilder()
-    b.button(text="🔥 Firebase Manager", callback_data="fb:menu")
-    if is_admin(uid, data):
-        b.button(text="📡 Firebase Live Status", callback_data="fb:status")
-        b.button(text="📱 Online Devices", callback_data="devices")
-    b.button(text="💰 Plans", callback_data="plans")
-    if is_admin(uid, data):
-        b.button(text="👥 Users", callback_data="users")
-        b.button(text="⚙️ Settings", callback_data="settings")
-    b.adjust(1)
+    if is_owner(uid, data):
+        b.button(text="📊 OWNER DASHBOARD", callback_data="dashboard")
+        b.button(text="🔥 FIREBASE MANAGER", callback_data="fb:menu")
+        b.button(text="🌐 CUSTOM PANELS", callback_data="panel:menu")
+        b.button(text="📡 LIVE STATUS", callback_data="fb:status")
+        b.button(text="📱 ONLINE DEVICES", callback_data="devices")
+        b.button(text="👥 USERS", callback_data="users")
+        b.button(text="⚙️ SETTINGS", callback_data="settings")
+        b.button(text="📢 FORCE JOIN HELP", callback_data="forcejoin:help")
+    elif is_admin(uid, data):
+        b.button(text="📡 LIVE STATUS", callback_data="fb:status")
+        b.button(text="📱 ONLINE DEVICES", callback_data="devices")
+        b.button(text="💰 PLANS", callback_data="plans")
+    else:
+        b.button(text="📱 TEST NUMBERS", callback_data="numbers:menu")
+        b.button(text="⭐ SAVED NUMBERS", callback_data="numbers:saved")
+        b.button(text="💰 VIEW PLANS", callback_data="plans")
+        b.button(text="🆔 MY ID", callback_data="myid")
+    b.adjust(2, 2, 2, 1)
     return b.as_markup()
 
 def kb_back(dest="home"):
@@ -199,6 +212,19 @@ async def start(message: Message):
     if str(uid) in data.get("banned", []) or data["users"].get(str(uid), {}).get("banned"):
         await message.answer("⛔ Access disabled hai. Owner se contact karo.")
         return
+    channel = data.get("settings", {}).get("force_join_channel")
+    if channel and not is_admin(uid, data):
+        try:
+            member = await message.bot.get_chat_member(channel, uid)
+            if member.status not in ("creator", "administrator", "member"):
+                raise ValueError("not a member")
+        except Exception:
+            b = InlineKeyboardBuilder()
+            b.button(text="📢 Join Channel", url=f"https://t.me/{channel.lstrip('@')}")
+            b.button(text="✅ Verify Join", callback_data="forcejoin:verify")
+            b.adjust(1)
+            await message.answer("🔒 Bot use karne se pehle required channel join karo.", reply_markup=b.as_markup())
+            return
     await message.answer(
         "✨ <b>Firebase Device Manager</b>\n\n"
         "Clean starter panel ready hai. Firebase URLs aur user settings local persistent JSON mein save hote hain.\n"
@@ -206,9 +232,204 @@ async def start(message: Message):
         reply_markup=kb_home(uid, data), parse_mode="HTML"
     )
 
+@dp.message(Command("setforcejoin"))
+async def set_force_join(message: Message):
+    data = load_data()
+    if not is_owner(message.from_user.id, data):
+        await message.answer("Owner only.")
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].strip().startswith("@"):
+        await message.answer("Use: /setforcejoin @YourChannel\nBot ko channel mein admin add karo.")
+        return
+    channel = parts[1].strip()
+    data["settings"]["force_join_channel"] = channel
+    save_data(data)
+    await message.answer(f"✅ Force Join channel set: <b>{channel}</b>", parse_mode="HTML")
+
+@dp.message(Command("unsetforcejoin"))
+async def unset_force_join(message: Message):
+    data = load_data()
+    if not is_owner(message.from_user.id, data):
+        await message.answer("Owner only.")
+        return
+    data["settings"]["force_join_channel"] = None
+    save_data(data)
+    await message.answer("✅ Force Join disabled.")
+
+@dp.callback_query(F.data == "forcejoin:verify")
+async def verify_force_join(cq: CallbackQuery):
+    data = load_data()
+    channel = data.get("settings", {}).get("force_join_channel")
+    if not channel:
+        await cq.answer("Force Join disabled.")
+        return
+    try:
+        member = await cq.bot.get_chat_member(channel, cq.from_user.id)
+        if member.status in ("creator", "administrator", "member"):
+            await cq.answer("Join verified!")
+            await cq.message.answer("✅ Join verified. Ab /start bhejo.")
+        else:
+            await cq.answer("Pehle channel join karo.", show_alert=True)
+    except Exception:
+        await cq.answer("Membership verify nahi hui. Bot ko channel admin banao.", show_alert=True)
+
 @dp.message(Command("id"))
 async def show_id(message: Message):
     await message.answer(f"Telegram User ID: <code>{message.from_user.id}</code>", parse_mode="HTML")
+
+
+@dp.callback_query(F.data == "panel:menu")
+async def panel_menu(cq: CallbackQuery):
+    data = load_data()
+    if not is_owner(cq.from_user.id, data):
+        await cq.answer("Owner only.", show_alert=True)
+        return
+    b = InlineKeyboardBuilder()
+    b.button(text="➕ Add Panel URL", callback_data="panel:add")
+    b.button(text="📋 List Panels", callback_data="panel:list")
+    b.button(text="⬅️ Back", callback_data="home")
+    b.adjust(1)
+    await cq.message.edit_text(
+        f"🌐 <b>Custom Panel Manager</b>\nSaved panel links: <b>{len(data.get('panels', []))}</b>\n\n"
+        "Panel links are stored as links only. API/message integration needs a documented, authorized endpoint.",
+        reply_markup=b.as_markup(), parse_mode="HTML"
+    )
+    await cq.answer()
+
+@dp.callback_query(F.data == "panel:add")
+async def panel_add(cq: CallbackQuery):
+    if not is_owner(cq.from_user.id):
+        await cq.answer("Owner only.", show_alert=True)
+        return
+    pending[cq.from_user.id] = "add_panel"
+    await cq.message.answer(
+        "Panel ka label aur HTTPS link bhejo:\n<code>My Panel | https://example.com/panel</code>\n\n"
+        "Secret tokens/credentials URL mein mat daalna.",
+        parse_mode="HTML"
+    )
+    await cq.answer()
+
+@dp.callback_query(F.data == "panel:list")
+async def panel_list(cq: CallbackQuery):
+    data = load_data()
+    if not is_owner(cq.from_user.id, data):
+        await cq.answer("Owner only.", show_alert=True)
+        return
+    items = data.get("panels", [])
+    if not items:
+        text = "🌐 Abhi koi custom panel saved nahi."
+    else:
+        text = "🌐 <b>Saved Custom Panels</b>\n\n" + "\n\n".join(
+            f"• <b>{p['label']}</b>\n{p['url']}" for p in items[:30]
+        )
+    b = InlineKeyboardBuilder()
+    b.button(text="➕ Add Panel", callback_data="panel:add")
+    b.button(text="⬅️ Back", callback_data="panel:menu")
+    b.adjust(1)
+    await cq.message.edit_text(text, reply_markup=b.as_markup(), parse_mode="HTML", disable_web_page_preview=True)
+    await cq.answer()
+
+@dp.callback_query(F.data == "numbers:menu")
+async def numbers_menu(cq: CallbackQuery):
+    data = load_data()
+    saved = data.get("saved_numbers", {}).get(str(cq.from_user.id), [])
+    b = InlineKeyboardBuilder()
+    b.button(text="➕ Add owned test number", callback_data="numbers:add")
+    b.button(text="⭐ Saved numbers", callback_data="numbers:saved")
+    b.button(text="⬅️ Back", callback_data="home")
+    b.adjust(1)
+    await cq.message.edit_text(
+        "📱 <b>Test Number Manager</b>\n\n"
+        "Yahan sirf tumhare own/authorized test numbers save honge. Real shared OTP-number inventory is not connected in this build.\n"
+        f"Saved test numbers: <b>{len(saved)}</b>",
+        reply_markup=b.as_markup(), parse_mode="HTML"
+    )
+    await cq.answer()
+
+@dp.callback_query(F.data == "numbers:add")
+async def numbers_add(cq: CallbackQuery):
+    pending[cq.from_user.id] = "add_test_number"
+    await cq.message.answer("Apna authorized test number label ke saath bhejo:\n<code>QA SIM 1 | +910000000000</code>", parse_mode="HTML")
+    await cq.answer()
+
+@dp.callback_query(F.data == "numbers:saved")
+async def numbers_saved(cq: CallbackQuery):
+    data = load_data()
+    uid = str(cq.from_user.id)
+    items = data.get("saved_numbers", {}).get(uid, [])
+    now = int(time.time())
+    items = [x for x in items if x.get("expires_at", 0) > now]
+    data.setdefault("saved_numbers", {})[uid] = items
+    save_data(data)
+    if not items:
+        text = "⭐ <b>Saved Numbers</b>\n\nKoi saved test number nahi hai, ya 24-hour save expire ho gaya."
+    else:
+        text = "⭐ <b>Saved Numbers (24-hour save)</b>\n\n" + "\n\n".join(
+            f"• <b>{x['label']}</b> — <code>{x['number']}</code>\nExpires: {time.strftime('%d-%m %H:%M UTC', time.gmtime(x['expires_at']))}"
+            for x in items
+        )
+    b = InlineKeyboardBuilder()
+    b.button(text="➕ Add test number", callback_data="numbers:add")
+    b.button(text="⬅️ Back", callback_data="numbers:menu")
+    b.adjust(1)
+    await cq.message.edit_text(text, reply_markup=b.as_markup(), parse_mode="HTML")
+    await cq.answer()
+
+@dp.callback_query(F.data == "dashboard")
+async def dashboard(cq: CallbackQuery):
+    data = load_data()
+    if not is_owner(cq.from_user.id, data):
+        await cq.answer("Owner only.", show_alert=True)
+        return
+    await cq.answer("Checking live status…")
+    async with aiohttp.ClientSession() as session:
+        statuses = await scan_all_firebase(session, data)
+    connected = sum(1 for s in statuses if s["status"] == "ONLINE")
+    online = sum(s["online_count"] for s in statuses)
+    devices = sum(s["device_count"] for s in statuses)
+    lines = [
+        "╭━━━ <b>OWNER DASHBOARD</b> ━━━╮",
+        f"┃ 🔥 Databases: <b>{len(data['firebases'])}</b>",
+        f"┃ 🟢 Reachable: <b>{connected}</b>",
+        f"┃ 📱 Devices: <b>{devices}</b>",
+        f"┃ 🟢 Online: <b>{online}</b>",
+        f"┃ 👥 Users: <b>{len(data['users'])}</b>",
+        f"┃ 🛡 Admins: <b>{len(data['admins'])}</b>",
+        "╰━━━━━━━━━━━━━━━━━━╯",
+        "",
+        "<i>Counts are live estimates from the supported /clients metadata schema.</i>"
+    ]
+    b = InlineKeyboardBuilder()
+    b.button(text="🔄 Refresh Dashboard", callback_data="dashboard")
+    b.button(text="🔥 Firebase Manager", callback_data="fb:menu")
+    b.button(text="📡 Full Status", callback_data="fb:status")
+    b.button(text="⬅️ Main Menu", callback_data="home")
+    b.adjust(1)
+    await cq.message.edit_text("\\n".join(lines), reply_markup=b.as_markup(), parse_mode="HTML")
+
+@dp.callback_query(F.data == "forcejoin:help")
+async def forcejoin_help(cq: CallbackQuery):
+    if not is_owner(cq.from_user.id):
+        await cq.answer("Owner only.", show_alert=True)
+        return
+    await cq.message.edit_text(
+        "📢 <b>FORCE JOIN</b>\\n\\n"
+        "1. Apne public channel mein bot ko admin banao.\\n"
+        "2. Command bhejo: <code>/setforcejoin @YourChannel</code>\\n"
+        "3. Disable: <code>/unsetforcejoin</code>\\n\\n"
+        "Membership verification ke liye bot ko channel member status check karne ki permission chahiye.",
+        reply_markup=kb_back("home"), parse_mode="HTML"
+    )
+    await cq.answer()
+
+@dp.callback_query(F.data == "myid")
+async def my_id(cq: CallbackQuery):
+    await cq.message.edit_text(
+        f"🆔 <b>Your Telegram ID</b>\\n<code>{cq.from_user.id}</code>",
+        reply_markup=kb_back("home"), parse_mode="HTML"
+    )
+    await cq.answer()
 
 @dp.callback_query(F.data == "home")
 async def home(cq: CallbackQuery):
@@ -272,11 +493,46 @@ async def bulk_file(message: Message):
 @dp.message(F.text)
 async def text_input(message: Message):
     mode = pending.get(message.from_user.id)
+    raw = message.text.strip()
+    if mode == "add_panel":
+        if not is_owner(message.from_user.id):
+            pending.pop(message.from_user.id, None); return
+        if "|" in raw:
+            label, url = [p.strip() for p in raw.split("|", 1)]
+        else:
+            label, url = "Custom Panel", raw
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            await message.answer("❌ Valid HTTPS panel link bhejo."); return
+        data = load_data()
+        if any(p["url"] == url for p in data.get("panels", [])):
+            pending.pop(message.from_user.id, None)
+            await message.answer("⚠️ Ye panel URL pehle se saved hai."); return
+        data.setdefault("panels", []).append({"id": str(int(time.time()*1000)), "label": label[:60] or "Custom Panel", "url": url, "added_at": int(time.time())})
+        save_data(data); pending.pop(message.from_user.id, None)
+        await message.answer(f"✅ Panel link saved: <b>{label}</b>\nNote: URL saved only; API schema verification is still needed.", parse_mode="HTML")
+        return
+    if mode == "add_test_number":
+        if "|" in raw:
+            label, number = [p.strip() for p in raw.split("|", 1)]
+        else:
+            label, number = "QA Test Number", raw
+        if not re.fullmatch(r"\+?[0-9 ()-]{7,20}", number):
+            await message.answer("❌ Number format check karo."); return
+        data = load_data()
+        uid = str(message.from_user.id)
+        entries = data.setdefault("saved_numbers", {}).setdefault(uid, [])
+        now = int(time.time())
+        entries = [x for x in entries if x.get("expires_at", 0) > now and x.get("number") != number]
+        entries.append({"label": label[:50] or "QA Test Number", "number": number, "saved_at": now, "expires_at": now + 86400})
+        data["saved_numbers"][uid] = entries
+        save_data(data); pending.pop(message.from_user.id, None)
+        await message.answer("⭐ Authorized test number saved for 24 hours.")
+        return
     if mode != "add_url":
         return
     if not is_owner(message.from_user.id):
         pending.pop(message.from_user.id, None); return
-    raw = message.text.strip()
     if "|" in raw:
         label, url = [p.strip() for p in raw.split("|", 1)]
     else:
@@ -419,7 +675,9 @@ async def users(cq: CallbackQuery):
     entries = list(data["users"].values())[-30:]
     lines = [f"👥 <b>Registered Users</b> — {len(data['users'])} total\n"]
     for u in reversed(entries):
-        lines.append(f"• {u.get('name','User')} — <code>{u['id']}</code> — @{u.get('username') or 'none'}")
+        safe_name = str(u.get("name", "User")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        safe_username = str(u.get("username") or "none").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        lines.append(f"• {safe_name} — <code>{u['id']}</code> — @{safe_username}")
     await cq.message.edit_text("\n".join(lines), reply_markup=kb_back("home"), parse_mode="HTML")
     await cq.answer()
 
@@ -433,13 +691,33 @@ async def settings(cq: CallbackQuery):
         reply_markup=kb_back("home"), parse_mode="HTML")
     await cq.answer()
 
+async def health(request):
+    return web.json_response({"ok": True, "service": "telegram-bot", "mode": "polling"})
+
+async def run_web_health_server():
+    app = web.Application()
+    app.router.add_get("/", health)
+    app.router.add_get("/health", health)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", "10000"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    log.info("Health endpoint listening on port %s", port)
+    return runner
+
 async def main():
     if not BOT_TOKEN:
         raise SystemExit("BOT_TOKEN env variable missing. Create a bot via BotFather and set BOT_TOKEN.")
     if MAIN_OWNER <= 0:
         raise SystemExit("MAIN_OWNER_ID env variable missing. Use your Telegram numeric user ID.")
     bot = Bot(BOT_TOKEN)
-    await dp.start_polling(bot)
+    runner = await run_web_health_server()
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await runner.cleanup()
+        await bot.session.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
