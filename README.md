@@ -1,70 +1,41 @@
-# Firebase Device Status Telegram Bot (GitHub + Render)
+# Firebase Safe Demo Telegram Bot
 
-## Features
-- Owner-only Firebase URL manager (single URL and `.txt` bulk import)
-- URL labels such as `EARNKAROBABA 7`
-- Duplicate URL prevention and JSON configuration
-- Owner/Admin live status screen: reachable/locked/offline/error, HTTP status, online-device count
-- Owner/Admin online-device metadata screen (device name, ID, battery if available)
-- Manual refresh buttons; each refresh checks the saved URLs live
-- Basic user registration, role-aware menus, and user list
-- Does **not** read, copy, or distribute SMS/OTP/message contents
+This bot reads limited device metadata and explicitly synthetic demo fixtures only.
+It does not read live SMS inboxes, OTPs, phone-number lists, or outgoing SMS command queues.
 
-## Render environment variables
-- `BOT_TOKEN`: bot token stored as a secret environment variable
-- `MAIN_OWNER_ID`: your numeric Telegram user ID
-- Optional: `SCAN_INTERVAL_SECONDS` (default 60)
+## Synthetic fixture
+Create `/demo_messages` in Firebase with records like:
 
-## Deploy
-1. Upload `bot.py`, `requirements.txt`, and `README.md` to a GitHub repository.
-2. In Render create a **Background Worker** from that repository.
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `python bot.py`
-5. Add the environment variables above.
-6. For settings to survive redeploys, configure a persistent disk and set `DATA_FILE` to a path on that disk.
+```json
+{
+  "sample-001": {
+    "demo": true,
+    "synthetic": true,
+    "type": "test",
+    "title": "Sample event",
+    "body": "This is a simulated message for testing the Telegram interface."
+  }
+}
+```
 
-## Add a URL
-Owner opens **Firebase Manager → Add URL** and sends:
-`EARNKAROBABA 7 | https://YOUR-PROJECT-default-rtdb.firebaseio.com`
+Never put real SMS, OTPs, financial alerts, phone numbers, or identity data in this path.
 
-The hostname is a placeholder; replace it with a database you own or are authorized to administer.
+## Install and run
+Python 3.10+:
 
-## Schema note
-The status checker reads `/clients.json?shallow=true` and individual `/clients/{device_id}.json` metadata. It expects online fields such as `isOnline`, `online`, `connected`, or `status`. If your authorized database uses another schema, the device count may show zero until its metadata schema is verified.
+```bash
+pip install -r requirements.txt
+export BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
+export FIREBASE_URL="https://YOUR-PROJECT-default-rtdb.firebaseio.com"
+export FIREBASE_AUTH="YOUR_FIREBASE_TOKEN"
+python bot.py
+```
 
-Firebase REST access requires HTTPS and Firebase Security Rules/authentication permission. A reachable URL does not automatically grant read access. Official docs: https://firebase.google.com/docs/reference/rest/database
+Render:
+- Build: `pip install -r requirements.txt`
+- Start: `python bot.py`
+- Add `BOT_TOKEN`, `FIREBASE_URL`, and `FIREBASE_AUTH` as environment variables.
 
-## Security
-- Never commit bot tokens or Firebase credentials into GitHub.
-- If a token was hardcoded in an old source file, revoke it and create a new one.
-- Do not make a database public merely to make the bot work.
+Commands: `/start`, `/health`, `/devices`, `/demo`.
 
-## Force Join
-1. Add the bot as an admin to your own public Telegram channel.
-2. In the bot, as the configured owner, run `/setforcejoin @YourChannel`.
-3. Disable it with `/unsetforcejoin`.
-4. New users must join and tap Verify. Owner/Admin can still access the panel.
-
-## Render Free Web Service
-This version exposes `/health` and `/` on `PORT` while Telegram polling runs. Select the `$0/month` instance if it is offered for your account. Free instances can spin down and do not provide persistent disks, so uptime and local JSON persistence are not guaranteed. Do not deploy until the environment variables are filled.
-
-## Owner UI refresh
-- Black-theme friendly compact inline control center
-- Owner dashboard with live database reachability, device counts, users, and admins
-- Separate owner/admin/user menus
-- Force Join help button and commands
-- This build supports authorized Firebase device metadata only. It does not retrieve or distribute real users' SMS/OTP contents; use synthetic codes or an owned test inbox for QA.
-
-## Custom panel links and 24-hour saved test numbers
-- Owner can save custom HTTPS panel links under Custom Panels.
-- Saving a panel URL does not automatically integrate its private API; API documentation and authorization are required.
-- Users can save their own/authorized QA test numbers for 24 hours. Expired saved entries are removed when the list is opened.
-- This build does not fetch or redistribute third-party login OTPs/SMS. Real incoming-message integration must be connected to an authorized inbox endpoint with per-user access control.
-
-
-## Backup and cleanup additions
-- Owner panel now has dead-source cleanup candidates for Firebase URLs and custom panel links. Removal is manual; HTTP/permission failures can be temporary.
-- Custom panel check tests only HTTPS page reachability/status; it does not infer undocumented API endpoints or fetch SMS records.
-- Owner can export a JSON settings backup and restore it by sending the JSON file to the bot. A local `.bak` copy is also maintained.
-- Render Free storage is ephemeral across some redeploys/replacements. Download backups and store them outside Render; local `.bak` alone is not durable cloud backup.
-- `re` import is included for test-number validation.
+Use read-only Firebase rules and a dedicated least-privilege token. Never commit credentials.
