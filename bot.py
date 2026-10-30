@@ -33,7 +33,7 @@ def load_data():
             "free_mode": True,
             "user_leases": {}, 
             "user_history": {},
-            "extra_tokens": [] # Store tokens for /add_bot
+            "extra_tokens": [] 
         }
         with open(DATA_FILE, "w") as f:
             json.dump(default_data, f, indent=4)
@@ -385,14 +385,19 @@ async def start_bot_instance(token: str):
 async def main():
     log.info("Bot Started!")
     await web_server() # Start web server so Render keeps it alive
+    
     main_bot = Bot(token=BOT_TOKEN)
     asyncio.create_task(background_global_scanner(main_bot))
-    await start_bot_instance(BOT_TOKEN)
     
-    # Load extra bots
+    # Load all bots
+    await start_bot_instance(BOT_TOKEN)
     data = load_data()
     for tok in data.get("extra_tokens", []):
         await start_bot_instance(tok)
+        
+    # THIS IS WHAT KEEPS THE APP RUNNING 24/7
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     asyncio.run(main())
