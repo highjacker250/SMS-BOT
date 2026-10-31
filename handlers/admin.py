@@ -5,7 +5,7 @@ import time
 import database as db
 import firebase_utils as fbu
 from utils.ui import sc, btn
-from utils.helper import is_admin, is_owner, get_countries, get_servers_grouped
+from utils.helper import is_admin, get_countries, get_servers_grouped
 from states import S
 
 admin_router = Router()
@@ -58,8 +58,6 @@ async def admin_server(cq: CallbackQuery):
     country, idx = parts[2], int(parts[3])
     d = db.load_data()
     servers = get_servers_grouped(d, country)
-    if idx >= len(servers): return await cq.answer("Not found")
-    
     srv = servers[idx]
     try: await cq.message.edit_text("🔄 Fetching online counts...")
     except: pass
@@ -82,7 +80,6 @@ async def admin_base(cq: CallbackQuery):
     d = db.load_data()
     servers = get_servers_grouped(d, country)
     fb = servers[srv_idx][base_idx]
-    
     try: await cq.message.edit_text("🔄 Fetching devices...")
     except: pass
     
@@ -104,7 +101,6 @@ async def admin_device(cq: CallbackQuery):
     d = db.load_data()
     servers = get_servers_grouped(d, country)
     fb = servers[srv_idx][base_idx]
-    
     try: await cq.message.edit_text("🔄 Fetching numbers...")
     except: pass
     
@@ -114,10 +110,8 @@ async def admin_device(cq: CallbackQuery):
     
     text = f"📱 <b>Device Info</b>\n🆔 {dev_id}\n🔗 {fb['url']}\n\n<b>Numbers:</b>\n"
     if not best_nums: text += "No numbers found."
-    for n, c in best_nums:
-        text += f"📞 +91{n} (Conf: {c}%)\n"
+    for n, c in best_nums: text += f"📞 +91{n} (Conf: {c}%)\n"
         
-    # DB me save karna
     d.setdefault("device_numbers", {})[dev_id] = {"numbers": [n for n,c in best_nums], "base": f"Base {base_idx+1}", "srv": f"Server {srv_idx+1}"}
     db.save_data(d)
     
@@ -142,16 +136,12 @@ async def admin_rmdo(cq: CallbackQuery):
     d = db.load_data()
     servers = get_servers_grouped(d, country)
     fb_to_rm = servers[srv_idx][base_idx]
-    
     d["firebases"] = [f for f in d["firebases"] if f["url"] != fb_to_rm["url"]]
-    
-    # Auto arrange
     curr = 1
     for f in d["firebases"]:
         if f.get("country") == country:
             f["label"] = f"Base {curr}"
             curr += 1
-            
     db.save_data(d)
     await cq.answer("✅ Removed & Auto-arranged!")
     await admin_manage_fb(cq)
@@ -167,8 +157,7 @@ async def admin_bulk_done(msg: Message, state: FSMContext):
     await state.clear()
     d = db.load_data()
     added = 0
-    country = "India" # Default
-    
+    country = "India"
     for line in msg.text.strip().split("\n"):
         url = line.strip()
         if not url: continue
@@ -179,12 +168,10 @@ async def admin_bulk_done(msg: Message, state: FSMContext):
             d["firebases"].append({"url": url, "label": "Base ?", "country": country, "auth": ""})
             added += 1
             
-    # Auto arrange
     curr = 1
     for f in d["firebases"]:
         if f.get("country") == country:
             f["label"] = f"Base {curr}"
             curr += 1
-            
     db.save_data(d)
     await msg.answer(f"✅ {added} Bases added!", reply_markup=admin_kb())
