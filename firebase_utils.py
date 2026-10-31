@@ -14,6 +14,22 @@ async def fetch_fb(url, auth=None):
     except Exception: pass
     return None
 
+def decode_panel_url(panel_url):
+    match = re.search(r'([A-Za-z0-9+/=]{20,})', panel_url)
+    if not match: return None
+    b64_str = match.group(1)
+    try:
+        b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
+        decoded = base64.b64decode(b64_str).decode('utf-8')
+        if "|||" in decoded: return decoded.split("|||")[0], ""
+        try:
+            data = json.loads(decoded)
+            if isinstance(data, dict) and "url" in data: return data["url"], data.get("key", "")
+        except json.JSONDecodeError:
+            if decoded.startswith("http"): return decoded, ""
+    except Exception: pass
+    return None
+
 def extract_best_numbers(dev_data, msgs):
     all_text = " ".join([m.get("message", "") for m in msgs])
     matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', all_text)
