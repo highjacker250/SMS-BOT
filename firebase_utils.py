@@ -42,7 +42,7 @@ def decode_panel_url(panel_url):
     return None
 
 def calculate_health(msgs):
-    if not msgs: return 1 # Dead
+    if not msgs: return 1 
     latest_time = 0
     for m in msgs:
         m_id = m.get("id", 0)
@@ -50,13 +50,11 @@ def calculate_health(msgs):
             if m_id > latest_time: latest_time = m_id / 1000
         elif isinstance(m_id, str) and m_id.isdigit() and len(m_id) > 12:
             if int(m_id)/1000 > latest_time: latest_time = int(m_id)/1000
-            
         m_time = m.get("time", 0)
         if isinstance(m_time, (int, float)) and m_time > 100000000000:
             if m_time/1000 > latest_time: latest_time = m_time/1000
             
     if latest_time == 0: return 5 
-        
     diff_hours = (time.time() - latest_time) / 3600
     if diff_hours < 0.5: return 10
     if diff_hours < 2: return 8
@@ -67,7 +65,6 @@ def calculate_health(msgs):
 def extract_best_numbers(dev_data, msgs):
     all_text = " ".join([m.get("message", "") for m in msgs])
     matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', all_text)
-    
     bad_numbers = {"9264092640", "18001800", "919951860002", "18001035577", "1234567890"}
     matches = [m for m in matches if m not in bad_numbers]
     
@@ -75,7 +72,7 @@ def extract_best_numbers(dev_data, msgs):
     scored_numbers = []
     
     for num, count in counts.items():
-        score = min(count * 15, 60) 
+        score = min(count * 10, 50) # Base score from frequency (max 50%)
         is_carrier = False
         for m in msgs:
             sender = str(m.get("sender", "")).lower()
@@ -86,7 +83,7 @@ def extract_best_numbers(dev_data, msgs):
                     break
         
         if is_carrier: score = 100 
-        else: score = min(score + 20, 95) 
+        else: score = min(score + 20, 99) # Add 20% for normal repeat
         scored_numbers.append((num, score))
 
     for key in ["phoneNumber", "phone", "number", "mobile"]:
