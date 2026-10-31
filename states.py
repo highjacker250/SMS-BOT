@@ -8,6 +8,4 @@ class S(StatesGroup):
     broadcast = State()
     add_credits_uid = State()
     add_credits_amt = State()
-    deduct_credits_uid = State()
-    deduct_credits_amt = State()
     support_msg = State()
