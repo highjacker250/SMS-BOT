@@ -19,17 +19,18 @@ def load_data():
             if res.data and len(res.data) > 0 and res.data[0]["data"]:
                 data = res.data[0]["data"]
                 if not data.get("firebases"):
-                    data["firebases"] = [{"url": u, "label": "Base", "auth": ""} for u in DEFAULT_URLS]
+                    data["firebases"] = [{"url": u, "label": f"Base {i+1}", "auth": ""} for i, u in enumerate(DEFAULT_URLS)]
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
             log.error(f"Supabase load error: {e}")
     
     _DATA_CACHE = {
-        "owner_id": 8480878371, "admins": [], "users": {}, "free_mode": True, "banned": [], "extra_tokens": [],
-        "firebases": [{"url": u, "label": "Base", "auth": ""} for u in DEFAULT_URLS],
-        "user_leases": {}, "used_devices": {}, "stats": {"total_otps": 0},
-        "device_usage": {}, "videos": [], "pricing": {"plans": []}, "settings": {"ref_credits": 3}
+        "owner_id": 8480878371, "super_admins": [], "admins": [], "banned": [], 
+        "free_mode": True, "users": {}, 
+        "firebases": [{"url": u, "label": f"Base {i+1}", "auth": ""} for i, u in enumerate(DEFAULT_URLS)],
+        "user_leases": {}, "used_devices": {}, "extra_tokens": [],
+        "stats": {"total_otps": 0}, "activity_log": []
     }
     return _DATA_CACHE
 
