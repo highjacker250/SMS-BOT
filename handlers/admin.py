@@ -1,6 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
+from aiogram.filters import Command
 import time
 import database as db
 import firebase_utils as fbu
@@ -10,6 +11,7 @@ from states import S
 
 admin_router = Router()
 
+# ================= KEYBOARDS =================
 def admin_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [btn("enter as user", "user:home", "👤"), btn("analytics", "admin:analytics", "📊")],
@@ -18,19 +20,49 @@ def admin_kb():
         [btn("view users", "admin:users", "👥"), btn("refresh panel", "admin:home", "🔄")]
     ])
 
-@admin_router.message(F.text == "/admin")
+# ================= HELPER FUNCTIONS =================
+async def admin_home_msg(msg: Message):
+    """Sends the Admin Dashboard message"""
+    d = db.load_data()
+    fbs = d.get("firebases", [])
+    countries = get_countries(d)
+    users_count = len(d.get("users", {}))
+    
+    # Count total bases and servers
+    total_servers = 0
+    for c in countries:
+        total_servers += len(get_servers_grouped(d, c))
+        
+    text = (
+        f"👑 <b>{sc('admin dashboard')}</b>\n\n"
+        f"🌍 {sc('countries')}: <b>{len(countries)}</b>\n"
+        f"🔥 {sc('total servers')}: <b>{total_servers}</b>\n"
+        f"📱 {sc('total bases')}: <b>{len(fbs)}</b>\n"
+        f"👥 {sc('total users')}: <b>{users_count}</b>\n\n"
+        f"<i>{sc('select an option below to manage the bot')}</i>"
+    )
+    
+    try:
+        await msg.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
+    except Exception:
+        # If called from callback query, edit message instead
+        try:
+            await msg.edit_text(text, reply_markup=admin_kb(), parse_mode="HTML")
+        except:
+            pass
+
+# ================= COMMANDS & CALLBACKS =================
+@admin_router.message(Command("admin"))
 async def admin_panel_cmd(msg: Message):
     if not is_admin(msg.from_user.id): return
-    d = db.load_data()
-    await msg.answer(f"👑 <b>{sc('admin dashboard')}</b>\nUsers: {len(d.get('users', {}))}\nBases: {len(d.get('firebases', []))}", reply_markup=admin_kb(), parse_mode="HTML")
+    await admin_home_msg(msg)
 
 @admin_router.callback_query(F.data == "admin:home")
 async def admin_home(cq: CallbackQuery):
-    if not is_admin(cq.from_user.id): return await cq.answer("🚫")
-    d = db.load_data()
-    try: await cq.message.edit_text(f"👑 <b>{sc('admin dashboard')}</b>\nUsers: {len(d.get('users', {}))}\nBases: {len(d.get('firebases', []))}", reply_markup=admin_kb(), parse_mode="HTML")
-    except: pass
+    if not is_admin(cq.from_user.id): return await cq.answer("🚫 Access Denied!")
+    await admin_home_msg(cq.message)
 
+# ================= MANAGE SERVERS =================
 @admin_router.callback_query(F.data == "admin:manage_fb")
 async def admin_manage_fb(cq: CallbackQuery):
     if not is_admin(cq.from_user.id): return await cq.answer("🚫")
@@ -39,7 +71,9 @@ async def admin_manage_fb(cq: CallbackQuery):
     kb = [[btn(c, f"admin:country:{c}", "🌍")] for c in countries]
     kb.append([btn("add bulk urls", "admin:add_bulk", "➕")])
     kb.append([btn("back", "admin:home", "🔙")])
-    await cq.message.edit_text(f"🔥 <b>{sc('manage servers')}</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    
+    text = f"🔥 <b>{sc('manage servers')}</b>\n\n{sc('select a country or add new urls')}:"
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @admin_router.callback_query(F.data.startswith("admin:country:"))
 async def admin_country(cq: CallbackQuery):
@@ -58,6 +92,8 @@ async def admin_server(cq: CallbackQuery):
     country, idx = parts[2], int(parts[3])
     d = db.load_data()
     servers = get_servers_grouped(d, country)
+    if idx >= len(servers): return await cq.answer("Server not found!")
+    
     srv = servers[idx]
     try: await cq.message.edit_text("🔄 Fetching online counts...")
     except: pass
@@ -104,7 +140,7 @@ async def admin_device(cq: CallbackQuery):
     try: await cq.message.edit_text("🔄 Fetching numbers...")
     except: pass
     
-    msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=1000", fb.get("auth"))
+    msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=100", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     best_nums = fbu.extract_best_numbers({}, msgs)
     
@@ -146,11 +182,19 @@ async def admin_rmdo(cq: CallbackQuery):
     await cq.answer("✅ Removed & Auto-arranged!")
     await admin_manage_fb(cq)
 
+# ================= BULK ADD URLS =================
 @admin_router.callback_query(F.data == "admin:add_bulk")
 async def admin_bulk_start(cq: CallbackQuery, state: FSMContext):
     if not is_admin(cq.from_user.id): return
     await state.set_state(S.add_bulk_urls)
-    await cq.message.edit_text("Send URLs one per line (Panel link or Firebase URL):\nFormat:\n<code>URL</code>\nOR\n<code>URL | AuthKey</code>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:manage_fb", "❌")]]), parse_mode="HTML")
+    text = (
+        "Send URLs one per line (Panel link or Firebase URL):\n\n"
+        "Format:\n"
+        "<code>URL</code>\n"
+        "OR\n"
+        "<code>URL | AuthKey</code>"
+    )
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:manage_fb", "❌")]]), parse_mode="HTML")
 
 @admin_router.message(S.add_bulk_urls)
 async def admin_bulk_done(msg: Message, state: FSMContext):
