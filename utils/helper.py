@@ -1,13 +1,11 @@
 import time
 import database as db
 
-# 5 Second Cooldown Tracker
 COOLDOWNS = {}
 
 def check_cooldown(uid: int) -> bool:
     now = time.time()
-    if uid in COOLDOWNS and now - COOLDOWNS[uid] < 5:
-        return False
+    if uid in COOLDOWNS and now - COOLDOWNS[uid] < 5: return False
     COOLDOWNS[uid] = now
     return True
 
@@ -26,11 +24,8 @@ def clear_user_lease(uid):
         db.save_data(d)
 
 def get_countries(data):
-    fbs = data.get("firebases", [])
-    return sorted(list(set([fb.get("country", "India") for fb in fbs])))
+    return sorted(list(set([fb.get("country", "India") for fb in data.get("firebases", [])])))
 
 def get_servers_grouped(data, country: str):
-    # Filter by country first
     fbs = [fb for fb in data.get("firebases", []) if fb.get("country", "India") == country]
-    # Group into 25s
     return [fbs[i:i+25] for i in range(0, len(fbs), 25)]
