@@ -1,36 +1,17 @@
-import time
-import database as db
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-# 5 Second Cooldown Tracker
-COOLDOWNS = {}
+SMALL_CAPS_MAP = str.maketrans(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "ᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢ"
+)
 
-def check_cooldown(uid: int) -> bool:
-    now = time.time()
-    if uid in COOLDOWNS and now - COOLDOWNS[uid] < 5:
-        return False
-    COOLDOWNS[uid] = now
-    return True
+def sc(text: str) -> str:
+    return text.translate(SMALL_CAPS_MAP)
 
-def is_owner(uid):
-    d = db.load_data()
-    return uid == d.get("owner_id") or uid in d.get("super_admins", [])
+def btn(text: str, callback_data: str, emoji: str = "") -> InlineKeyboardButton:
+    label = f"{emoji} {sc(text)}".strip()
+    return InlineKeyboardButton(text=label, callback_data=callback_data)
 
-def is_admin(uid):
-    d = db.load_data()
-    return is_owner(uid) or uid in d.get("admins", [])
-
-def clear_user_lease(uid):
-    d = db.load_data()
-    if str(uid) in d.get("user_leases", {}):
-        del d["user_leases"][str(uid)]
-        db.save_data(d)
-
-def get_countries(data):
-    fbs = data.get("firebases", [])
-    return sorted(list(set([fb.get("country", "India") for fb in fbs])))
-
-def get_servers_grouped(data, country: str):
-    # Filter by country first
-    fbs = [fb for fb in data.get("firebases", []) if fb.get("country", "India") == country]
-    # Group into 25s
-    return [fbs[i:i+25] for i in range(0, len(fbs), 25)]
+def btn_url(text: str, url: str, emoji: str = "") -> InlineKeyboardButton:
+    label = f"{emoji} {sc(text)}".strip()
+    return InlineKeyboardButton(text=label, url=url)
