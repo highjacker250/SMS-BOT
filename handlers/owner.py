@@ -2,11 +2,10 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
-import asyncio
+import asyncio, time
 import database as db
 from utils.ui import sc, btn
 from utils.helper import is_owner
-from core.start_bot import start_new_bot, running_bots
 from states import S
 
 owner_router = Router()
@@ -22,8 +21,20 @@ async def cmd_add_bot(msg: Message):
     if token not in d.setdefault("extra_tokens", []):
         d["extra_tokens"].append(token)
         db.save_data(d)
-        from main import routers_to_include
-        await start_new_bot(token, routers_to_include)
+        # Start bot function logic
+        from core.scanner import start_scanner
+        from aiogram import Bot, Dispatcher
+        from aiogram.fsm.storage.memory import MemoryStorage
+        from handlers.user import user_router
+        from handlers.admin import admin_router
+        from handlers.owner import owner_router
+        
+        new_bot = Bot(token=token)
+        dp = Dispatcher(storage=MemoryStorage())
+        dp.include_routers(owner_router, admin_router, user_router)
+        asyncio.create_task(dp.start_polling(new_bot))
+        asyncio.create_task(start_scanner(new_bot))
+        
         await msg.answer("✅ Bot added and running!")
     else:
         await msg.answer("Bot already exists.")
@@ -61,5 +72,3 @@ async def owner_broadcast_done(msg: Message, state: FSMContext):
             await asyncio.sleep(0.05)
         except: pass
     await msg.answer(f"✅ Sent to {ok} users.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]))
-
-# Baaki owner handlers (Credits, Admins) yahan aayenge, filhaal maine base structure de diya hai.2
