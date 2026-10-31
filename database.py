@@ -21,7 +21,6 @@ def load_data():
                 if not data.get("firebases"):
                     data["firebases"] = [{"url": u, "label": "India", "auth": ""} for u in DEFAULT_URLS]
                 
-                # 🔥 FIX: Purane galti se save hue URL labels ko Country name (India) mein badalna
                 for fb in data["firebases"]:
                     lbl = fb.get("label", "").lower()
                     if "http" in lbl or "rtdb" in lbl or "firebase" in lbl or not lbl:
@@ -35,7 +34,7 @@ def load_data():
     _DATA_CACHE = {
         "owner_id": 8480878371, "admins": [], "users": {}, "free_mode": True, "banned": [], "extra_tokens": [],
         "firebases": [{"url": u, "label": "India", "auth": ""} for u in DEFAULT_URLS],
-        "user_leases": {}, "user_history": {}, "stats": {"total_otps": 0},
+        "user_leases": {}, "used_devices": {}, "stats": {"total_otps": 0},
         "device_usage": {}, "videos": [], "pricing": {"plans": []}, "settings": {"ref_credits": 3}
     }
     return _DATA_CACHE
