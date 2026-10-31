@@ -68,7 +68,6 @@ def extract_best_numbers(dev_data, msgs):
     all_text = " ".join([m.get("message", "") for m in msgs])
     matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', all_text)
     
-    # Filter out fake/bank numbers
     bad_numbers = {"9264092640", "18001800", "919951860002", "18001035577", "1234567890"}
     matches = [m for m in matches if m not in bad_numbers]
     
@@ -90,7 +89,6 @@ def extract_best_numbers(dev_data, msgs):
         else: score = min(score + 20, 95) 
         scored_numbers.append((num, score))
 
-    # Check direct device metadata
     for key in ["phoneNumber", "phone", "number", "mobile"]:
         if dev_data.get(key):
             n = re.sub(r'\D', '', str(dev_data[key]))[-10:]
@@ -116,4 +114,4 @@ def extract_service_name(text, sender):
     if sender:
         parts = sender.split("-")
         if len(parts) > 1: return parts[1]
-    return "Unknown"w
+    return "Unknown"
