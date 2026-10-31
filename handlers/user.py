@@ -22,11 +22,9 @@ async def cmd_start(msg: Message):
     uid = msg.from_user.id
     d = db.load_data()
     clear_user_lease(uid)
-    
     if str(uid) not in d["users"]:
         d["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time()), "otp_history": [], "saved_numbers": {}}
         db.save_data(d)
-        
     await msg.answer(f"👋 <b>{sc('welcome to otp hub')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(), parse_mode="HTML")
 
 @user_router.callback_query(F.data == "user:home")
@@ -37,9 +35,7 @@ async def user_home(cq: CallbackQuery):
 
 @user_router.callback_query(F.data == "user:get_num")
 async def user_get_num(cq: CallbackQuery):
-    if not check_cooldown(cq.from_user.id):
-        return await cq.answer("⏳ Wait 5 seconds before clicking again!", show_alert=True)
-        
+    if not check_cooldown(cq.from_user.id): return await cq.answer("⏳ Wait 5 seconds!", show_alert=True)
     clear_user_lease(cq.from_user.id)
     d = db.load_data()
     countries = get_countries(d)
@@ -54,7 +50,6 @@ async def user_country(cq: CallbackQuery):
     country = cq.data.split(":")[2]
     d = db.load_data()
     servers = get_servers_grouped(d, country)
-    
     if not servers: return await cq.answer("No servers in this country.")
     
     kb = []
@@ -62,14 +57,11 @@ async def user_country(cq: CallbackQuery):
         ping = await fbu.check_ping(servers[i][0]["url"])
         kb.append([btn(f"server {i+1} ({ping})", f"user:server:{country}:{i}", "📁")])
     kb.append([btn("back", "user:get_num", "🔙")])
-    
     await cq.message.edit_text(f"🌍 {country} - <b>{sc('servers')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @user_router.callback_query(F.data.startswith("user:server:"))
 async def user_server(cq: CallbackQuery):
-    if not check_cooldown(cq.from_user.id):
-        return await cq.answer("⏳ Wait 5 seconds before clicking again!", show_alert=True)
-        
+    if not check_cooldown(cq.from_user.id): return await cq.answer("⏳ Wait 5 seconds!", show_alert=True)
     parts = cq.data.split(":")
     country, idx = parts[2], int(parts[3])
     uid = cq.from_user.id
@@ -106,7 +98,6 @@ async def user_server(cq: CallbackQuery):
     data = db.load_data()
     data["used_devices"][str(uid)] = used
     
-    # 1000 SMS limit for extraction
     msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=1000", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     
@@ -162,11 +153,7 @@ async def user_info(cq: CallbackQuery):
     d = db.load_data()
     lease = d.get("user_leases", {}).get(str(cq.from_user.id), {})
     if not lease or lease.get("dev_id") != dev_id: return await cq.answer("Lease expired!")
-    
-    await cq.answer(
-        f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: {lease.get('health')}/10\nURL: {lease.get('fb_url')}", 
-        show_alert=True
-    )
+    await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: {lease.get('health')}/10\nURL: {lease.get('fb_url')}", show_alert=True)
 
 @user_router.callback_query(F.data.startswith("user:save:"))
 async def user_save(cq: CallbackQuery):
@@ -175,13 +162,12 @@ async def user_save(cq: CallbackQuery):
     d = db.load_data()
     lease = d.get("user_leases", {}).get(str(uid), {})
     if not lease or lease.get("dev_id") != dev_id: return await cq.answer("❌ Lease expired!")
-        
+    
     nums = lease.get("numbers", [])
     save_key = nums[0] if nums else dev_id
     user = d["users"].setdefault(str(uid), {})
     user.setdefault("saved_numbers", {})[save_key] = {
-        "dev_id": dev_id, "fb_url": lease["fb_url"], "base_idx": lease.get("base_idx"),
-        "health": lease.get("health"), "time": int(time.time())
+        "dev_id": dev_id, "fb_url": lease["fb_url"], "base_idx": lease.get("base_idx"), "health": lease.get("health"), "time": int(time.time())
     }
     db.save_data(d)
     await cq.answer("⭐ Saved to My Numbers!")
@@ -191,9 +177,7 @@ async def user_saved_list(cq: CallbackQuery):
     uid = cq.from_user.id
     d = db.load_data()
     saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
-    
-    if not saved:
-        return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+    if not saved: return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
         
     kb = []
     for key, info in saved.items():
@@ -210,7 +194,6 @@ async def user_access(cq: CallbackQuery):
     saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
     if key not in saved: return await cq.answer("Not found!")
     info = saved[key]
-    
     if time.time() - info["time"] > 86400:
         del saved[key]
         db.save_data(d)
