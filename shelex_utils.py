@@ -16,9 +16,14 @@ async def get_numbers(country):
             async with session.get(f"https://otp-api.shelex.dev/api/list/{country}") as resp:
                 if resp.status == 200: 
                     data = await resp.json()
-                    # Safe parsing if API sends dicts or strings
+                    nums = []
                     if isinstance(data, list):
-                        return [str(n.get("phone", n)) if isinstance(n, dict) else str(n) for n in data]
+                        for item in data:
+                            if isinstance(item, dict) and "phone" in item:
+                                nums.append(str(item["phone"]))
+                            elif isinstance(item, str):
+                                nums.append(item)
+                    return nums
     except Exception as e: log.error(f"Shelex numbers error: {e}")
     return []
 
