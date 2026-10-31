@@ -120,7 +120,6 @@ async def background_scanner():
                 if current_time < lease["expire_at"] and "dev_id" in lease:
                     device_to_users.setdefault(lease["dev_id"], []).append(uid)
             
-            # Dead URL Auto-Removal
             active_fbs = []
             for fb in fbs:
                 latest = await get_latest_msgs(fb["url"], fb.get("auth"), limit=1)
@@ -134,14 +133,13 @@ async def background_scanner():
                     dead_url_tracker[fb["url"]] = 0
                 else:
                     dead_url_tracker[fb["url"]] = dead_url_tracker.get(fb["url"], 0) + 1
-                    if dead_url_tracker[fb["url"]] < 10: # 10 scans (30s) se dead hai toh remove
+                    if dead_url_tracker[fb["url"]] < 10: 
                         active_fbs.append(fb)
                     else:
                         log.info(f"Auto-removed dead URL: {fb['url']}")
             
             if len(active_fbs) != len(fbs):
                 d["firebases"] = active_fbs
-                # Auto-arrange labels
                 for i, f in enumerate(d["firebases"]):
                     f["label"] = f"Base {i+1}"
                 db.save_data(d)
@@ -274,7 +272,6 @@ async def admin_rmfb(cq: CallbackQuery):
         fb_to_remove = servers[srv_idx][base_idx]
         d["firebases"] = [f for f in d["firebases"] if f["url"] != fb_to_remove["url"]]
         
-        # Auto-arrange
         for i, f in enumerate(d["firebases"]):
             f["label"] = f"Base {i+1}"
         db.save_data(d)
@@ -300,7 +297,6 @@ async def admin_add_bulk_done(msg: Message, state: FSMContext):
         if url.startswith("http"):
             d["firebases"].append({"url": url, "label": "Base", "auth": ""})
             added += 1
-    # Auto-arrange
     for i, f in enumerate(d["firebases"]):
         f["label"] = f"Base {i+1}"
     db.save_data(d)
@@ -498,7 +494,6 @@ async def access_saved(cq: CallbackQuery):
     is_online = clients and dev_id in clients and clients[dev_id].get("status") is True
     
     if not is_online:
-        # ONLY offline check, no health check
         return await cq.answer("❌ Device offline or removed. Not in range, try after some time.", show_alert=True)
         
     d["user_leases"][str(uid)] = {
@@ -526,6 +521,16 @@ async def stop_listening(cq: CallbackQuery):
     await cq.answer("⏹ Stopped.", show_alert=True)
     await user_home(cq)
 
+@router.callback_query(F.data == "user:history")
+async def user_hist(cq: CallbackQuery):
+    d = db.load_data()
+    hist = d["users"].get(str(cq.from_user.id), {}).get("otp_history", [])
+    text = "📜 <b>OTP History</b>\n\n"
+    if not hist: text += "No history."
+    for h in hist:
+        text += f"🕒 {time.strftime('%H:%M', time.localtime(h['time']))} | {h['service']} | <code>{h['otp']}</code>\n"
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+
 # ================= EXTRA ADMIN FEATURES =================
 @router.callback_query(F.data == "admin:analytics")
 async def admin_analytics(cq: CallbackQuery):
@@ -533,7 +538,7 @@ async def admin_analytics(cq: CallbackQuery):
     leases = d.get("user_leases", {})
     text = "📊 <b>Active Rent IDs</b>\n\n"
     for uid, l in leases.items():
-        if time.time() < l["expire_at"]:
+        if time.t2ime() < l["expire_at"]:
             text += f"👤 <code>{uid}</code> | 🆔 <code>{l['dev_id']}</code> | {l.get('base_idx')}\n"
     if len(text) == 26: text += "No active leases."
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), parse_mode="HTML")
