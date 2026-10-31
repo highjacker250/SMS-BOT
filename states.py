@@ -1,7 +1,6 @@
 from aiogram.fsm.state import State, StatesGroup
 
 class S(StatesGroup):
-    # Admin/Owner Inputs
     add_bulk_urls = State()
     add_bot = State()
     add_admin = State()
