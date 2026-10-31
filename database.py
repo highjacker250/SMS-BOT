@@ -1,13 +1,11 @@
-import os, json, logging
+import os, logging
 from supabase import create_client, Client
 
 log = logging.getLogger("DB")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
-# Global Cache to stop spamming API
 _DATA_CACHE = None
 
 DEFAULT_URLS = [
@@ -24,9 +22,7 @@ DEFAULT_URLS = [
 
 def load_data():
     global _DATA_CACHE
-    if _DATA_CACHE is not None:
-        return _DATA_CACHE
-
+    if _DATA_CACHE is not None: return _DATA_CACHE
     if supabase:
         try:
             res = supabase.table("bot_data").select("data").eq("id", 1).execute()
@@ -36,13 +32,10 @@ def load_data():
                     data["firebases"] = [{"url": u, "label": u.split("//")[-1].split(".")[0], "auth": ""} for u in DEFAULT_URLS]
                 _DATA_CACHE = data
                 return _DATA_CACHE
-        except Exception as e:
-            log.error(f"Supabase load error: {e}")
+        except Exception as e: log.error(f"Supabase load error: {e}")
     
-    # Default Data
     _DATA_CACHE = {
-        "owner_id": 8480878371, "admins": [], "users": {},
-        "free_mode": True, "banned": [], "extra_tokens": [],
+        "owner_id": 8480878371, "admins": [], "users": {}, "free_mode": True, "banned": [], "extra_tokens": [],
         "firebases": [{"url": u, "label": u.split("//")[-1].split(".")[0], "auth": ""} for u in DEFAULT_URLS],
         "user_leases": {}, "user_history": {}, "stats": {"total_otps": 0},
         "device_usage": {}, "videos": [], "pricing": {"plans": []}, "settings": {"ref_credits": 3}
@@ -53,7 +46,5 @@ def save_data(data):
     global _DATA_CACHE
     _DATA_CACHE = data
     if supabase:
-        try:
-            supabase.table("bot_data").update({"data": data}).eq("id", 1).execute()
-        except Exception as e:
-            log.error(f"Supabase save error: {e}")
+        try: supabase.table("bot_data").update({"data": data}).eq("id", 1).execute()
+        except Exception as e: log.error(f"Supabase save error: {e}")
