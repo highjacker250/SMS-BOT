@@ -3,10 +3,11 @@ from collections import Counter
 
 async def fetch_fb(url, auth=None):
     full_url = url
-    if auth: full_url += f"&auth={auth}" if "?" in full_url else f"?auth={auth}"
+    if auth and str(auth).strip() and str(auth) != "None":
+        full_url += f"&auth={auth}" if "?" in full_url else f"?auth={auth}"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(full_url, timeout=3) as resp: # 3s Fast Timeout
+            async with session.get(full_url, timeout=4) as resp: # Fast Timeout
                 if resp.status == 200:
                     txt = await resp.text()
                     if txt == "null" or not txt: return {}
@@ -14,11 +15,17 @@ async def fetch_fb(url, auth=None):
     except Exception: pass
     return None
 
-async def check_ping(url):
+async def check_ping(url, auth=None):
     start = time.time()
+    full_url = url
+    if auth and str(auth).strip() and str(auth) != "None":
+        full_url += f"&auth={auth}" if "?" in full_url else f"?auth={auth}"
+    
+    ping_url = f"{full_url}/.json?shallow=true" if "?" not in full_url else f"{full_url}&shallow=true"
+    # Better ping via clients.json
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{url}/.json?shallow=true", timeout=3) as resp:
+            async with session.get(f"{full_url}/clients.json?shallow=true", timeout=3) as resp:
                 if resp.status == 200: return f"{int((time.time() - start) * 1000)}ms"
     except Exception: pass
     return "❌ Timeout"
@@ -77,7 +84,7 @@ def extract_otp(text):
 
 def extract_service_name(text, sender):
     text_lower = text.lower()
-    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel", "meesho": "Meesho"}
+    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel"}
     for key, name in services.items():
         if key in text_lower: return name
     if sender and "-" in sender: return sender.split("-")[1]
