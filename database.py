@@ -21,21 +21,10 @@ def load_data():
         except Exception as e: 
             log.error(f"Supabase load error: {e}")
     
-    # Default Data Structure
     _DATA_CACHE = {
-        "owner_id": config.MAIN_OWNER, 
-        "super_admins": [], 
-        "admins": [], 
-        "banned": [], 
-        "free_mode": True,
-        "users": {}, 
-        "firebases": [], # Format: {"url": "...", "label": "Base 1", "country": "India", "auth": ""}
-        "user_leases": {}, 
-        "used_devices": {}, 
-        "extra_tokens": [],
-        "force_join": {"enabled": False, "channels": []},
-        "stats": {"total_otps": 0}, 
-        "activity_log": []
+        "owner_id": config.MAIN_OWNER, "super_admins": [], "admins": [], "banned": [], 
+        "free_mode": True, "users": {}, "firebases": [], "user_leases": {}, 
+        "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}
     }
     return _DATA_CACHE
 
