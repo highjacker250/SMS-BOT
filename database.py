@@ -19,13 +19,7 @@ def load_data():
             if res.data and len(res.data) > 0 and res.data[0]["data"]:
                 data = res.data[0]["data"]
                 if not data.get("firebases"):
-                    data["firebases"] = [{"url": u, "label": "India", "auth": ""} for u in DEFAULT_URLS]
-                
-                for fb in data["firebases"]:
-                    lbl = fb.get("label", "").lower()
-                    if "http" in lbl or "rtdb" in lbl or "firebase" in lbl or not lbl:
-                        fb["label"] = "India"
-
+                    data["firebases"] = [{"url": u, "label": "Base", "auth": ""} for u in DEFAULT_URLS]
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
@@ -33,7 +27,7 @@ def load_data():
     
     _DATA_CACHE = {
         "owner_id": 8480878371, "admins": [], "users": {}, "free_mode": True, "banned": [], "extra_tokens": [],
-        "firebases": [{"url": u, "label": "India", "auth": ""} for u in DEFAULT_URLS],
+        "firebases": [{"url": u, "label": "Base", "auth": ""} for u in DEFAULT_URLS],
         "user_leases": {}, "used_devices": {}, "stats": {"total_otps": 0},
         "device_usage": {}, "videos": [], "pricing": {"plans": []}, "settings": {"ref_credits": 3}
     }
