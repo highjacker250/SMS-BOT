@@ -21,8 +21,8 @@ async def cmd_add_bot(msg: Message):
     if token not in d.setdefault("extra_tokens", []):
         d["extra_tokens"].append(token)
         db.save_data(d)
-        # Start bot function logic
-        from core.scanner import start_scanner
+        
+        from services.otp_service import start_scanner
         from aiogram import Bot, Dispatcher
         from aiogram.fsm.storage.memory import MemoryStorage
         from handlers.user import user_router
