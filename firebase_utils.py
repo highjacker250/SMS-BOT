@@ -45,71 +45,101 @@ def decode_panel_url(panel_url):
 
 def calculate_health(msgs):
     if not msgs: return 1
-    latest_time = 0
+    latest = 0
+    now_ms = time.time() * 1000
     for m in msgs:
-        m_id = m.get("id", 0)
-        if isinstance(m_id, (int, float)) and m_id > 100000000000: 
-            if m_id > latest_time: latest_time = m_id / 1000
-        elif isinstance(m_id, str) and m_id.isdigit() and len(m_id) > 12:
-            if int(m_id)/1000 > latest_time: latest_time = int(m_id)/1000
-        m_time = m.get("time", 0)
-        if isinstance(m_time, (int, float)) and m_time > 100000000000:
-            if m_time/1000 > latest_time: latest_time = m_time/1000
-            
-    if latest_time == 0: return 5 
-    diff_hours = (time.time() - latest_time) / 3600
-    if diff_hours < 0.5: return 10
-    if diff_hours < 2: return 8
-    if diff_hours < 6: return 6
-    if diff_hours < 12: return 4
-    return 2
+        ts = 0
+        raw_id = m.get("id", 0)
+        try:
+            iv = int(raw_id)
+            if iv > 10**12: ts = iv
+        except: pass
+        if not ts and m.get("dateTime"):
+            try: ts = datetime.strptime(m["dateTime"], '%d-%m-%Y | %I:%M %p').timestamp() * 1000
+            except: pass
+        if ts > latest: latest = ts
+        
+    if not latest: return 1
+    age_h = (now_ms - latest) / 3_600_000.0
+    if age_h < 1: return 10
+    if age_h < 6: return 9
+    if age_h < 24: return 8
+    if age_h < 48: return 7
+    if age_h < 24 * 7: return 5
+    if age_h < 24 * 14: return 3
+    if age_h < 24 * 30: return 2
+    return 1
+
+_DIGITS = re.compile(r'\D')
+def _clean_mobile(raw):
+    if not raw or not isinstance(raw, str): return None
+    s = raw.strip().lower()
+    if s in ('unknown', 'none', 'null', 'na', 'n/a', ''): return None
+    d = _DIGITS.sub('', s)
+    if len(d) == 12 and d.startswith('91'): d = d[2:]
+    elif len(d) == 11 and d.startswith('0'): d = d[1:]
+    if len(d) != 10 or d[0] not in '6789': return None
+    return d
+
+_CARRIER_PATTERNS = [
+    re.compile(r'(?:jio|airtel|vi\b|bsnl|idea|vodafone|reliance)[\s\-]+(?:mobile\s+|number\s+|no\.?\s*)?(\d{10})', re.I),
+    re.compile(r'(?:jio|airtel|vi|bsnl|idea|vodafone|reliance)\s+नंबर\s*[:：]?\s*(\d{10})', re.I),
+    re.compile(r'number\s*[:：]\s*(\d{10})', re.I),
+]
+
+_RE_DLT_ID = re.compile(r'^[A-Z]{1,3}-[A-Z0-9]{2,}-[A-Z]$')
+_RE_SHORTCODE = re.compile(r'^\d{4,6}$')
+_RE_ALNUM_ID = re.compile(r'^[A-Z]{2,}-[A-Z0-9]{3,}$')
+
+def _is_service_sender(sender):
+    if not sender: return True
+    s = sender.strip()
+    return bool(_RE_SHORTCODE.match(s) or _RE_DLT_ID.match(s) or _RE_ALNUM_ID.match(s))
 
 def extract_best_numbers(dev_data, msgs):
-    found_nums = {}
-    bad_numbers = {"9264092640", "18001800", "919951860002", "18001035577", "1234567890", "0000000000"}
+    if not isinstance(dev_data, dict): dev_data = {}
+    candidates = {}
+    def bump(num, conf):
+        if not num: return
+        if candidates.get(num, -1) < conf: candidates[num] = conf
 
-    if isinstance(dev_data.get("sims"), list):
-        for sim in dev_data["sims"]:
-            if isinstance(sim, dict):
-                for key in ["phoneNumber", "number", "mobile"]:
-                    if sim.get(key):
-                        n = re.sub(r'\D', '', str(sim[key]))[-10:]
-                        if len(n) == 10 and n[0] in "6789" and n not in bad_numbers:
-                            found_nums[n] = 100
+    # 1. mobNo (100% real)
+    bump(_clean_mobile(dev_data.get('mobNo')), 100)
 
-    for key in ["phoneNumber", "phone", "number", "mobile"]:
-        if dev_data.get(key):
-            n = re.sub(r'\D', '', str(dev_data[key]))[-10:]
-            if len(n) == 10 and n[0] in "6789" and n not in bad_numbers:
-                found_nums[n] = 100
+    # 2. sims array
+    for sim in (dev_data.get('sims') or []):
+        if isinstance(sim, dict): bump(_clean_mobile(sim.get('phoneNumber')), 100)
 
-    for m in msgs:
-        text = m.get("message", "")
-        sender = str(m.get("sender", "")).lower()
-        if any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
-            carrier_match = re.search(r'(?:jio|airtel|vi|bsnl)\s*(?:number|no\.?)?\s*[:\-]?\s*([6-9]\d{9})', text, re.IGNORECASE)
-            if carrier_match:
-                n = carrier_match.group(1)
-                if n not in bad_numbers: found_nums[n] = 100
-                continue
-            if "jio" in sender or "jionet" in sender:
-                 match = re.search(r'\b([6-9]\d{9})\b', text)
-                 if match and match.group(1) not in bad_numbers: found_nums[match.group(1)] = 100
-    
-    return sorted(found_nums.items(), key=lambda x: x[1], reverse=True)[:2]
+    if msgs:
+        # 3. Carrier self-mention
+        for m in msgs:
+            if not isinstance(m, dict) or m.get('type') != 'incoming': continue
+            body = m.get('message', '') or ''
+            for pat in _CARRIER_PATTERNS:
+                for hit in pat.findall(body): bump(_clean_mobile(hit), 100)
+
+        # 4. Frequency of real-mobile senders
+        freq = {}
+        for m in msgs:
+            if not isinstance(m, dict) or m.get('type') != 'incoming': continue
+            if _is_service_sender(m.get('sender', '')): continue
+            n = _clean_mobile(m.get('sender', ''))
+            if n: freq[n] = freq.get(n, 0) + 1
+        for n, c in freq.items(): bump(n, min(50 + c * 5, 95))
+
+    return sorted(candidates.items(), key=lambda kv: (-kv[1], kv[0]))[:2]
+
+_OTP_PATTERNS = [
+    re.compile(r'\b(?:otp|o\.t\.p|verification\s*code|code)\s*(?:is|[:=-])?\s*(\d{4,8})\b', re.I),
+    re.compile(r'\b(\d{4,8})\s*(?:is|:)\s*(?:your|the)\s*(?:otp|code|verification)', re.I),
+    re.compile(r'\b(\d{4,8})\b[^\n]{0,40}?(?:otp|verification)', re.I),
+]
 
 def extract_otp(text):
-    # 🔥 LOOSE REGEX: Agar OTP/Code word hai YA message chota hai aur usme 4-8 digit number hai
-    text_lower = text.lower()
-    if any(k in text_lower for k in ["otp", "code", "verification", "login", "pin", "password", "secret", "canva"]):
-        match = re.search(r'\b(\d{4,8})\b', text)
-        if match: return match.group(1)
-    
-    # Fallback: Agar text chota hai (150 chars se kam) aur usme 4-6 digit ka number hai
-    if len(text) < 150:
-        match = re.search(r'\b(\d{4,6})\b', text)
-        if match: return match.group(1)
-        
+    if not text: return None
+    for pat in _OTP_PATTERNS:
+        m = pat.search(text)
+        if m: return m.group(1)
     return None
 
 def extract_service_name(text, sender):
