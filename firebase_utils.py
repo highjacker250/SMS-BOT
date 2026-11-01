@@ -1,5 +1,5 @@
 import aiohttp, json, re, base64, time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 async def fetch_fb(url, auth=None):
     full_url = url
@@ -103,7 +103,7 @@ def get_ws_chance(msgs):
         if not isinstance(m, dict): continue
         text = (m.get("message") or "").lower()
         sender = str(m.get("sender") or "").lower()
-        if "whatsapp" in text or "whatsapp" in sender:
+        if "whatsapp" in text or "whatsapp" in sender or "wa" in sender:
             ts = 0
             try:
                 iv = int(m.get("id", 0))
@@ -111,14 +111,13 @@ def get_ws_chance(msgs):
             except: pass
             if ts: ws_msgs.append(ts)
     
-    if not ws_msgs: return 97 # Fresh line
-    
+    if not ws_msgs: return 97
     latest_ws = max(ws_msgs)
     diff_hours = (now - latest_ws) / 3600
     
-    if diff_hours > 24: return 97 # Cooldown passed, fresh again
-    if diff_hours < 1: return 96 # Very recent
-    return 70 # In between, slightly risky
+    if diff_hours > 24: return 97
+    if diff_hours < 1: return 96
+    return 70
 
 def extract_best_numbers(dev_data, msgs):
     if not isinstance(dev_data, dict): dev_data = {}
@@ -168,3 +167,7 @@ def extract_service_name(text, sender):
         if key in text_lower: return name
     if sender and "-" in sender: return sender.split("-")[1]
     return "Unknown"
+
+def get_ist_time_str(ts):
+    ist = datetime.utcfromtimestamp(ts) + timedelta(hours=5, minutes=30)
+    return ist.strftime("%d %b %Y | %I:%M %p")
