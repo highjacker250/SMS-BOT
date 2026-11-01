@@ -119,7 +119,6 @@ async def backup_scanner(bot):
                         if now - d["device_backups"][dev_id].get("time", 0) > 172800: del d["device_backups"][dev_id]
                 db.save_data(d)
 
-            # 🔥 TIMER ALERTS
             timers = d.get("upcoming_timers", {})
             now = int(time.time())
             changed = False
