@@ -12,20 +12,21 @@ from states import S
 admin_router = Router()
 
 def admin_kb():
+    # 🔥 SIRF KAAM KE BUTTONS
     return InlineKeyboardMarkup(inline_keyboard=[
         [btn("enter as user", "user:home", "👤"), btn("manage servers", "admin:manage_fb", "🔥")],
         [btn("track device", "admin:track_device", "🔍"), btn("manage vips", "admin:vip", "⭐")],
         [btn("refresh panel", "admin:home", "🔄")]
     ])
 
-async def admin_home_msg(msg: Message):
+def get_admin_text():
     d = db.load_data()
     fbs = d.get("firebases", [])
     countries = get_countries(d)
     users_count = len(d.get("users", {}))
     total_servers = sum(len(get_servers_grouped(d, c)) for c in countries)
-        
-    text = (
+    
+    return (
         f"👑 <b>{sc('admin dashboard')}</b>\n\n"
         f"🌍 {sc('countries')}: <b>{len(countries)}</b>\n"
         f"🔥 {sc('total servers')}: <b>{total_servers}</b>\n"
@@ -33,21 +34,21 @@ async def admin_home_msg(msg: Message):
         f"👥 {sc('total users')}: <b>{users_count}</b>\n\n"
         f"<i>{sc('select an option below to manage the bot')}</i>"
     )
-    try: await msg.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
-    except: pass
 
 @admin_router.message(Command("admin"))
 async def admin_panel_cmd(msg: Message):
     if not is_admin(msg.from_user.id): return
-    await admin_home_msg(msg)
+    await msg.answer(get_admin_text(), reply_markup=admin_kb(), parse_mode="HTML")
 
 @admin_router.callback_query(F.data == "admin:home")
 async def admin_home(cq: CallbackQuery):
     await cq.answer()
     if not is_admin(cq.from_user.id): return
-    try: await cq.message.edit_text("🔄 Refreshing...")
-    except: pass
-    await admin_home_msg(cq.message)
+    try: 
+        # 🔥 Direct edit, no "Refreshing..." spam
+        await cq.message.edit_text(get_admin_text(), reply_markup=admin_kb(), parse_mode="HTML")
+    except Exception:
+        pass # Agar same text ho toh error ignore karega
 
 # 🔥 VIP SYSTEM
 @admin_router.callback_query(F.data == "admin:vip")
@@ -58,7 +59,7 @@ async def admin_vip(cq: CallbackQuery):
     text = f"⭐ <b>Manage VIPs</b>\n\nTotal VIPs: {len(vips)}\n\nUse <code>/addvip &lt;id&gt;</code> to add a new VIP."
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), parse_mode="HTML")
 
-# 🔥 DEVICE TRACKER (HTML Tags Fixed)
+# 🔥 DEVICE TRACKER
 @admin_router.callback_query(F.data == "admin:track_device")
 async def admin_track_device(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
