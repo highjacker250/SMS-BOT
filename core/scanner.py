@@ -6,12 +6,13 @@ from utils.ui import sc
 
 log = logging.getLogger("Scanner")
 
-async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id):
+async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_number):
     otp_msg = (
         f"🔔 <b>{sc('otp received')}!</b>\n\n"
         f"📱 <b>{sc('service')}:</b> {service}\n"
         f"🔑 <b>{sc('otp')}:</b> <code>{otp}</code>\n\n"
         f"🆔 <b>{sc('rent id')}:</b> <code>{rent_id}</code>\n"
+        f"📞 <b>{sc('number')}:</b> <code>+91{phone_number if phone_number else 'Unknown'}</code>\n"
         f"💬 <i>{msg_text[:60]}...</i>"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"{otp}", copy_text=CopyTextButton(text=otp))]])
@@ -20,15 +21,14 @@ async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id):
     user = d["users"].get(str(uid))
     if user:
         hist = user.setdefault("otp_history", [])
-        hist.insert(0, {"service": service, "otp": otp, "time": int(time.time())})
+        hist.insert(0, {"service": service, "otp": otp, "time": int(time.time()), "number": phone_number})
         user["otp_history"] = hist[:20]
         db.save_data(d)
         
     try: await bot.send_message(uid, otp_msg, reply_markup=kb, parse_mode="HTML")
     except Exception: pass
 
-async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id):
-    # Fetch top 5 messages to ensure we don't miss multiple simultaneous OTPs
+async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_number):
     url = f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5"
     msgs = await fbu.fetch_fb(url, auth)
     if not msgs: return last_msg_id
@@ -46,10 +46,9 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id):
             if otp:
                 service = fbu.extract_service_name(text, msg.get("sender", ""))
                 for uid in users:
-                    await send_otp_to_user(bot, uid, service, otp, text, dev_id)
+                    await send_otp_to_user(bot, uid, service, otp, text, dev_id, phone_number)
             if current_id > highest_id:
                 highest_id = current_id
-                
     return highest_id
 
 async def start_scanner(bot):
@@ -70,7 +69,7 @@ async def start_scanner(bot):
                     if fb_url and dev_id:
                         key = (fb_url, dev_id)
                         if key not in device_to_users:
-                            device_to_users[key] = {"users": [], "last_msg_id": lease.get("last_msg_id", 0)}
+                            device_to_users[key] = {"users": [], "last_msg_id": lease.get("last_msg_id", 0), "phone": lease.get("top_number", "Unknown")}
                         device_to_users[key]["users"].append(uid)
             
             if device_to_users:
@@ -79,7 +78,7 @@ async def start_scanner(bot):
                 for key in keys:
                     fb_url, dev_id = key
                     auth = fbs.get(fb_url, "")
-                    tasks.append(check_device(bot, fb_url, auth, dev_id, device_to_users[key]["users"], device_to_users[key]["last_msg_id"]))
+                    tasks.append(check_device(bot, fb_url, auth, dev_id, device_to_users[key]["users"], device_to_users[key]["last_msg_id"], device_to_users[key]["phone"]))
                 
                 results = await asyncio.gather(*tasks)
                 
@@ -93,7 +92,7 @@ async def start_scanner(bot):
                                 updated = True
                 if updated: db.save_data(d)
 
-            await asyncio.sleep(1.0) # 1s loop for ultra-fast delivery
+            await asyncio.sleep(1.0)
         except Exception as e:
             log.error(f"Scanner error: {e}")
             await asyncio.sleep(1.0)
