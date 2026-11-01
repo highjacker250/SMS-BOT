@@ -16,7 +16,8 @@ def load_data():
             res = supabase.table("bot_data").select("data").eq("id", 1).execute()
             if res.data and len(res.data) > 0 and res.data[0]["data"]:
                 data = res.data[0]["data"]
-                data["owner_id"] = config.MAIN_OWNER # 🔥 Force Owner
+                data["owner_id"] = config.MAIN_OWNER
+                if "vip_users" not in data: data["vip_users"] = [] # 🔥 VIP FIX
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
@@ -25,7 +26,7 @@ def load_data():
     _DATA_CACHE = {
         "owner_id": config.MAIN_OWNER, "super_admins": [], "admins": [], "banned": [], 
         "free_mode": True, "users": {}, "firebases": [], "user_leases": {}, 
-        "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}
+        "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}, "vip_users": []
     }
     return _DATA_CACHE
 
