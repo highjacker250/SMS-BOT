@@ -52,13 +52,11 @@ def calculate_health(msgs):
             if m_id > latest_time: latest_time = m_id / 1000
         elif isinstance(m_id, str) and m_id.isdigit() and len(m_id) > 12:
             if int(m_id)/1000 > latest_time: latest_time = int(m_id)/1000
-            
         m_time = m.get("time", 0)
         if isinstance(m_time, (int, float)) and m_time > 100000000000:
             if m_time/1000 > latest_time: latest_time = m_time/1000
             
     if latest_time == 0: return 5 
-        
     diff_hours = (time.time() - latest_time) / 3600
     if diff_hours < 0.5: return 10
     if diff_hours < 2: return 8
@@ -92,25 +90,31 @@ def extract_best_numbers(dev_data, msgs):
             carrier_match = re.search(r'(?:jio|airtel|vi|bsnl)\s*(?:number|no\.?)?\s*[:\-]?\s*([6-9]\d{9})', text, re.IGNORECASE)
             if carrier_match:
                 n = carrier_match.group(1)
-                if n not in bad_numbers:
-                    found_nums[n] = 100
-                    continue
+                if n not in bad_numbers: found_nums[n] = 100
+                continue
             if "jio" in sender or "jionet" in sender:
                  match = re.search(r'\b([6-9]\d{9})\b', text)
-                 if match and match.group(1) not in bad_numbers:
-                     found_nums[match.group(1)] = 100
+                 if match and match.group(1) not in bad_numbers: found_nums[match.group(1)] = 100
     
-    sorted_nums = sorted(found_nums.items(), key=lambda x: x[1], reverse=True)[:2]
-    return sorted_nums
+    return sorted(found_nums.items(), key=lambda x: x[1], reverse=True)[:2]
 
 def extract_otp(text):
-    if not any(k in text.lower() for k in ["otp", "code", "verification", "login", "pin", "password", "sign-in", "secret"]): return None
-    match = re.search(r'\b(\d{4,8})\b', text)
-    return match.group(1) if match else None
+    # 🔥 LOOSE REGEX: Agar OTP/Code word hai YA message chota hai aur usme 4-8 digit number hai
+    text_lower = text.lower()
+    if any(k in text_lower for k in ["otp", "code", "verification", "login", "pin", "password", "secret", "canva"]):
+        match = re.search(r'\b(\d{4,8})\b', text)
+        if match: return match.group(1)
+    
+    # Fallback: Agar text chota hai (150 chars se kam) aur usme 4-6 digit ka number hai
+    if len(text) < 150:
+        match = re.search(r'\b(\d{4,6})\b', text)
+        if match: return match.group(1)
+        
+    return None
 
 def extract_service_name(text, sender):
     text_lower = text.lower()
-    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel", "meesho": "Meesho", "tezcredit": "TezCredit", "creditt": "Creditt", "phonpe": "PhonePe", "tatacl": "TataCL"}
+    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel", "meesho": "Meesho", "tezcredit": "TezCredit", "creditt": "Creditt", "phonpe": "PhonePe", "tatacl": "TataCL", "canva": "Canva"}
     for key, name in services.items():
         if key in text_lower: return name
     if sender and "-" in sender: return sender.split("-")[1]
