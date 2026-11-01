@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message
 from aiogram.filters import Command
 import database as db
 from utils.helper import is_owner
@@ -17,5 +17,5 @@ async def cmd_add_vip(msg: Message):
         if uid not in d.setdefault("vip_users", []):
             d["vip_users"].append(uid)
             db.save_data(d)
-            await msg.answer(f"✅ <code>{uid}</code> is now a VIP user!")
+            await msg.answer(f"✅ <code>{uid}</code> is now a VIP user!", parse_mode="HTML")
     except: await msg.answer("Invalid ID.")
