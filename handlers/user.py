@@ -3,12 +3,14 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 import random, time, asyncio
+import logging
 import database as db
 import firebase_utils as fbu
 from utils.ui import sc, btn
 from utils.helper import clear_user_lease, get_countries, get_servers_grouped, is_owner
 import config
 
+log = logging.getLogger("UserHandler")
 user_router = Router()
 
 def main_kb():
@@ -20,6 +22,10 @@ def main_kb():
 @user_router.message(CommandStart())
 async def cmd_start(msg: Message):
     uid = msg.from_user.id
+    
+    # 🔥 DEBUG LOG YAHAN ADD KAR DIYA HAI
+    log.info(f"START RECEIVED FROM: {uid} | Config Owner: {config.MAIN_OWNER} | Is Owner: {uid == config.MAIN_OWNER}")
+    
     d = db.load_data()
     clear_user_lease(uid)
     if str(uid) not in d["users"]:
@@ -27,6 +33,7 @@ async def cmd_start(msg: Message):
         db.save_data(d)
 
     if uid == config.MAIN_OWNER or is_owner(uid):
+        log.info(f"User {uid} is OWNER. Sending admin panel.")
         from handlers.admin import admin_home_msg
         await admin_home_msg(msg)
         return
@@ -80,9 +87,11 @@ async def user_server(cq: CallbackQuery):
     
     used = d.setdefault("used_devices", {}).setdefault(str(uid), {})
     now = int(time.time())
+    
     async def fetch_clients_data(fb):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         return fb, clients
+        
     tasks = [fetch_clients_data(fb) for fb in servers[idx]]
     results = await asyncio.gather(*tasks)
     available, repeat, all_devs = [], [], []
@@ -111,7 +120,6 @@ async def user_server(cq: CallbackQuery):
     
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
     
-    # 🔥 BACKUP LOGIC
     is_backup = False
     if not best_nums:
         backups = data.get("device_backups", {}).get(dev_id, {}).get("numbers", [])
@@ -146,7 +154,6 @@ async def user_server(cq: CallbackQuery):
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
     
-    # 🔥 FULL RENT ID IF NO NUMBER
     rent_id_disp = dev_id if not best_nums else f"{dev_id[:12]}..."
     
     text = (
@@ -247,4 +254,4 @@ async def user_history(cq: CallbackQuery):
             time_str = fbu.get_ist_time_str(h['time'])
             num = h.get('number', 'Unknown')
             text += f"📅 {time_str}\n📱 {h['service']}\n📞 <code>+91{num}</code>\n🔑 <code>{h['otp']}</code>\n───────────\n"
-    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")2
