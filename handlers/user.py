@@ -22,8 +22,6 @@ def main_kb():
 @user_router.message(CommandStart())
 async def cmd_start(msg: Message):
     uid = msg.from_user.id
-    
-    # 🔥 DEBUG LOG YAHAN ADD KAR DIYA HAI
     log.info(f"START RECEIVED FROM: {uid} | Config Owner: {config.MAIN_OWNER} | Is Owner: {uid == config.MAIN_OWNER}")
     
     d = db.load_data()
@@ -33,9 +31,8 @@ async def cmd_start(msg: Message):
         db.save_data(d)
 
     if uid == config.MAIN_OWNER or is_owner(uid):
-        log.info(f"User {uid} is OWNER. Sending admin panel.")
-        from handlers.admin import admin_home_msg
-        await admin_home_msg(msg)
+        from handlers.admin import get_admin_text, admin_kb
+        await msg.answer(get_admin_text(), reply_markup=admin_kb(), parse_mode="HTML")
         return
 
     await msg.answer(f"👋 <b>{sc('welcome to dark otp bot')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(), parse_mode="HTML")
@@ -96,7 +93,7 @@ async def user_server(cq: CallbackQuery):
     results = await asyncio.gather(*tasks)
     available, repeat, all_devs = [], [], []
     for fb_i, (fb, clients) in enumerate(results):
-        if not clients: continue
+        if not clients or not isinstance(clients, dict): continue
         for dev_id, c in clients.items():
             if not isinstance(c, dict): continue
             is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 900) * 1000)
@@ -120,12 +117,10 @@ async def user_server(cq: CallbackQuery):
     
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
     
-    is_backup = False
     if not best_nums:
         backups = data.get("device_backups", {}).get(dev_id, {}).get("numbers", [])
         if backups:
             best_nums = [(n, "Backup") for n in backups]
-            is_backup = True
 
     real_health = fbu.calculate_health(msgs)
     base_label = fb.get("label", f"Base {fb_i+1}")
