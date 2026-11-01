@@ -181,12 +181,13 @@ async def user_service(cq: CallbackQuery):
     )
     kb = kb_nums + [
         [btn("info", f"user:info:{dev_id}", "ℹ️"), btn("save number", f"user:save:{dev_id}", "⭐")],
-        [btn("set timer", f"user:set_timer:{dev_id}", "⏰")],
+        [btn("set timer", f"user:set_timer:{dev_id}", "⏰")], # 👈 Naya button
         [btn("next number", f"user:service:{country}:{service}", "🔄"), btn("stop", "user:stop", "⏹")],
         [btn("back", f"user:country:{country}", "🔙")]
     ]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
+# ... (User_server function, same as VIP flow logic but normal flow)
 @user_router.callback_query(F.data.startswith("user:server:"))
 async def user_server(cq: CallbackQuery):
     await cq.answer()
@@ -262,4 +263,194 @@ async def user_server(cq: CallbackQuery):
         for n, c in best_nums:
             conf_text = "Backup" if c == "Backup" else f"{c}%"
             nums_text += f"📞 <code>+91{n}</code> | {conf_text}\n"
-            kb_nums.append([InlineKeyboardButton(text
+            kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
+    else:
+        nums_text = f"⚠️ <b>{sc('extracting number...')}</b>"
+        
+    battery = str(dev_data.get("battery", "100")).replace("%", "")
+    if not battery or battery == "?": battery = "100"
+    rent_id_disp = dev_id if not best_nums else f"{dev_id[:12]}..."
+    
+    text = (
+        f"📱 <b>{sc('details')}</b>\n"
+        f"🔥 {sc('srv')}: {idx+1} | {base_label}\n"
+        f"🆔 <code>{rent_id_disp}</code>{rep_mark} | ⚙️ {battery}T | ❤️ {display_health}/10\n\n"
+        f"{nums_text}"
+    )
+    kb = kb_nums + [
+        [btn("info", f"user:info:{dev_id}", "ℹ️"), btn("save number", f"user:save:{dev_id}", "⭐")],
+        [btn("set timer", f"user:set_timer:{dev_id}", "⏰")], # 👈 Timer button
+        [btn("next number", f"user:server:{country}:{idx}", "🔄"), btn("stop", "user:stop", "⏹")],
+        [btn("back", f"user:country:{country}", "🔙")]
+    ]
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_router.callback_query(F.data.startswith("user:info:"))
+async def user_info(cq: CallbackQuery):
+    dev_id = cq.data.split(":")[2]
+    d = db.load_data()
+    lease = d.get("user_leases", {}).get(str(cq.from_user.id), {})
+    if not lease or lease.get("dev_id") != dev_id: return await cq.answer("Lease expired!", show_alert=True)
+    
+    is_vip = cq.from_user.id in d.get("vip_users", []) or is_owner(cq.from_user.id)
+    if is_vip:
+        await cq.answer(f"ℹ️ VIP Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nURL: {lease.get('fb_url')}", show_alert=True)
+    else:
+        await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\n\n🔒 URL hidden.", show_alert=True)
+
+@user_router.callback_query(F.data.startswith("user:save:"))
+async def user_save(cq: CallbackQuery):
+    dev_id = cq.data.split(":")[2]
+    uid = cq.from_user.id
+    d = db.load_data()
+    lease = d.get("user_leases", {}).get(str(uid), {})
+    if not lease or lease.get("dev_id") != dev_id: return await cq.answer("❌ Lease expired!", show_alert=True)
+    nums = lease.get("numbers", [])
+    save_key = nums[0] if nums else dev_id
+    user = d["users"].setdefault(str(uid), {})
+    user.setdefault("saved_numbers", {})[save_key] = {
+        "dev_id": dev_id, "fb_url": lease["fb_url"], "base_idx": lease.get("base_idx"), "time": int(time.time())
+    }
+    db.save_data(d)
+    await cq.answer("⭐ Saved!", show_alert=True)
+
+@user_router.callback_query(F.data == "user:saved")
+async def user_saved_list(cq: CallbackQuery):
+    await cq.answer()
+    uid = cq.from_user.id
+    d = db.load_data()
+    saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
+    if not saved: return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+    kb = []
+    for key, info in saved.items():
+        disp = f"+91{key}" if len(key) == 10 else key
+        kb.append([btn(f"{disp} | {info.get('base_idx', '')}", f"user:access:{key}", "📞")])
+    kb.append([btn("main menu", "user:home", "🏠")])
+    await cq.message.edit_text("⭐ <b>My Numbers</b>\nTap to re-access:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_router.callback_query(F.data.startswith("user:access:"))
+async def user_access(cq: CallbackQuery):
+    await cq.answer()
+    key = cq.data.split(":")[2]
+    uid = cq.from_user.id
+    d = db.load_data()
+    saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
+    if key not in saved: return await cq.message.edit_text("Not found!")
+    info = saved[key]
+    if time.time() - info["time"] > 86400:
+        del saved[key]
+        db.save_data(d)
+        return await cq.message.edit_text("❌ 24 hours complete. Number expired.", show_alert=True)
+    clients = await fbu.fetch_fb(f"{info['fb_url']}/clients.json")
+    if not (clients and info["dev_id"] in clients):
+        return await cq.message.edit_text("❌ Device offline or removed. Try after some time.", show_alert=True)
+    d["user_leases"][str(uid)] = {
+        "dev_id": info["dev_id"], "fb_url": info["fb_url"], "base_idx": info.get("base_idx"), "numbers": [key], "expire_at": int(time.time()) + 3600, "last_msg_id": 0, "top_number": key
+    }
+    db.save_data(d)
+    text = f"📱 <b>{sc('re-accessed')}</b>\n🆔 <code>{info['dev_id'][:12]}...</code>\n📞 <code>+91{key}</code>"
+    kb = [[btn("stop", "user:stop", "⏹")], [btn("main menu", "user:home", "🏠")]]
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "user:stop")
+async def user_stop(cq: CallbackQuery):
+    clear_user_lease(cq.from_user.id)
+    await cq.answer("⏹ Stopped.", show_alert=True)
+    await user_home(cq)
+
+@user_router.callback_query(F.data == "user:history")
+async def user_history(cq: CallbackQuery):
+    await cq.answer()
+    d = db.load_data()
+    hist = d["users"].get(str(cq.from_user.id), {}).get("otp_history", [])
+    text = "📜 <b>OTP History</b>\n\n"
+    if not hist: text += "No history."
+    else:
+        for h in hist:
+            time_str = fbu.get_ist_time_str(h['time'])
+            num = h.get('number', 'Unknown')
+            text += f"📅 {time_str}\n📱 {h['service']}\n📞 <code>+91{num}</code>\n🔑 <code>{h['otp']}</code>\n───────────\n"
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "user:upcoming")
+async def user_upcoming(cq: CallbackQuery):
+    await cq.answer()
+    d = db.load_data()
+    timers = d.get("upcoming_timers", {})
+    user_timers = {k: v for k, v in timers.items() if v.get("user_id") == cq.from_user.id}
+    
+    if not user_timers:
+        return await cq.message.edit_text("📅 <b>Upcoming OTPs</b>\n\nKoi timer set nahi hai.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+        
+    text = "📅 <b>Upcoming OTPs</b>\n\n"
+    for k, t in user_timers.items():
+        text += f"📞 <code>+91{t['number']}</code>\n⏰ {get_ist_time_str(t['target_time'])}\n───────────\n"
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+
+@user_router.callback_query(F.data.startswith("user:set_timer:"))
+async def user_set_timer_start(cq: CallbackQuery, state: FSMContext):
+    await cq.answer()
+    dev_id = cq.data.split(":")[2]
+    d = db.load_data()
+    lease = d.get("user_leases", {}).get(str(cq.from_user.id), {})
+    if not lease or lease.get("dev_id") != dev_id:
+        return await cq.answer("❌ Lease expired!", show_alert=True)
+    
+    await state.set_state(S.set_timer)
+    await state.update_data(timer_dev_id=dev_id)
+    await cq.message.edit_text(
+        f"⏰ <b>{sc('set otp timer')}</b>\n\n"
+        f"🆔 Rent ID: <code>{dev_id}</code>\n\n"
+        f"Kitne time baad OTP aayega?\n"
+        f"Format: <code>59m</code>, <code>16h</code>, <code>1d</code>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:home", "❌")]]),
+        parse_mode="HTML"
+    )
+
+@user_router.message(S.set_timer)
+async def user_set_timer_done(msg: Message, state: FSMContext):
+    fsm_data = await state.get_data()
+    await state.clear()
+    
+    dev_id = fsm_data.get("timer_dev_id")
+    text = msg.text.strip().lower()
+    
+    match = re.match(r'^(\d+)\s*([mhd])$', text)
+    if not match:
+        return await msg.answer("❌ Invalid format. Use <code>59m</code>, <code>16h</code>, or <code>1d</code>.", parse_mode="HTML")
+    
+    value = int(match.group(1))
+    unit = match.group(2)
+    
+    if unit == 'm': seconds = value * 60
+    elif unit == 'h': seconds = value * 3600
+    elif unit == 'd': seconds = value * 86400
+    else: seconds = 0
+    
+    target_time = int(time.time()) + seconds
+    
+    d = db.load_data()
+    lease = d.get("user_leases", {}).get(str(msg.from_user.id), {})
+    phone_number = lease.get("top_number", "Unknown")
+    
+    timer_id = f"{msg.from_user.id}_{dev_id}"
+    d.setdefault("upcoming_timers", {})[timer_id] = {
+        "user_id": msg.from_user.id,
+        "rent_id": dev_id,
+        "number": phone_number,
+        "target_time": target_time,
+        "alert_5m": False,
+        "alert_2m": False,
+        "alert_now": False
+    }
+    db.save_data(d)
+    
+    ist_time = fbu.get_ist_time_str(target_time)
+    await msg.answer(
+        f"✅ <b>Timer Set!</b>\n\n"
+        f"📞 Number: <code>+91{phone_number}</code>\n"
+        f"⏰ OTP Window: <b>{ist_time}</b>\n\n"
+        f"Main aapko 5 min aur 2 min pehle alert bhejunga!",
+        reply_markup=main_kb(msg.from_user.id),
+        parse_mode="HTML"
+    )
