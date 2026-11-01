@@ -110,6 +110,15 @@ async def user_server(cq: CallbackQuery):
     last_id = int(msgs[-1].get("id", 0)) if msgs else 0
     
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
+    
+    # 🔥 BACKUP LOGIC
+    is_backup = False
+    if not best_nums:
+        backups = data.get("device_backups", {}).get(dev_id, {}).get("numbers", [])
+        if backups:
+            best_nums = [(n, "Backup") for n in backups]
+            is_backup = True
+
     real_health = fbu.calculate_health(msgs)
     base_label = fb.get("label", f"Base {fb_i+1}")
     top_num = best_nums[0][0] if best_nums else "Unknown"
@@ -120,16 +129,16 @@ async def user_server(cq: CallbackQuery):
     }
     db.save_data(data)
     
-    # 🔥 VIP SYSTEM
     is_vip = uid in data.get("vip_users", []) or is_owner(uid)
-    display_health = real_health if is_vip else 10 # Normal ko 10 dikhega
-    
+    display_health = real_health if is_vip else 10
     rep_mark = " #" if is_rep else ""
+    
     nums_text = ""
     kb_nums = []
     if best_nums:
         for n, c in best_nums:
-            nums_text += f"📞 <code>+91{n}</code> | {c}%\n"
+            conf_text = "Backup" if c == "Backup" else f"{c}%"
+            nums_text += f"📞 <code>+91{n}</code> | {conf_text}\n"
             kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
     else:
         nums_text = f"⚠️ <b>{sc('no number found...')}</b>"
@@ -137,11 +146,13 @@ async def user_server(cq: CallbackQuery):
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
     
-    # 🔥 COMPACT FONT (Small caps & 1 line)
+    # 🔥 FULL RENT ID IF NO NUMBER
+    rent_id_disp = dev_id if not best_nums else f"{dev_id[:12]}..."
+    
     text = (
         f"📱 <b>{sc('details')}</b>\n"
         f"🔥 {sc('srv')}: {idx+1} | {base_label}\n"
-        f"🆔 <code>{dev_id[:12]}...</code>{rep_mark} | ⚙️ {battery}T | ❤️ {display_health}/10\n\n"
+        f"🆔 <code>{rent_id_disp}</code>{rep_mark} | ⚙️ {battery}T | ❤️ {display_health}/10\n\n"
         f"{nums_text}"
     )
     kb = kb_nums + [
