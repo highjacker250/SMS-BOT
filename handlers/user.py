@@ -104,7 +104,7 @@ async def user_service(cq: CallbackQuery):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         return fb, clients
         
-    tasks = [fetch_clients_data(fb) for fb in servers[0]] # Just for demo, scan all servers
+    tasks = [fetch_clients_data(fb) for fb in servers[0]]
     results = await asyncio.gather(*tasks)
     
     p1, p2, p3 = [], [], []
@@ -131,7 +131,6 @@ async def user_service(cq: CallbackQuery):
     elif p3: fb_i, fb, dev_id, dev_data, chance = random.choice(p3)
     else: return await cq.message.edit_text("❌ No lines found for this service.", parse_mode="HTML")
     
-    # Process the selected device (same as user_server logic)
     used[dev_id] = now
     data = db.load_data()
     data["used_devices"][str(uid)] = used
@@ -189,7 +188,6 @@ async def user_service(cq: CallbackQuery):
 
 @user_router.callback_query(F.data.startswith("user:server:"))
 async def user_server(cq: CallbackQuery):
-    # Normal flow, same as previous code
     await cq.answer()
     parts = cq.data.split(":")
     country, idx = parts[2], int(parts[3])
