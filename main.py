@@ -3,12 +3,10 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 import config
-import database as db
-from services.otp_service import start_scanner
+from core.scanner import start_scanner
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
-from middlewares.throttle import ThrottlingMiddleware
 
 logging.basicConfig(level=logging.INFO)
 
@@ -23,12 +21,7 @@ async def main():
     await web_server()
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
-    
-    # Throttling middleware add kiya
-    dp.callback_query.middleware(ThrottlingMiddleware(rate_limit=5.0))
-    
     dp.include_routers(owner_router, admin_router, user_router)
-    
     asyncio.create_task(start_scanner(bot))
     await dp.start_polling(bot)
 
