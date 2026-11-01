@@ -4,13 +4,11 @@ import config
 
 log = logging.getLogger("DB")
 supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_KEY) if config.SUPABASE_URL and config.SUPABASE_KEY else None
-
 _DATA_CACHE = None
 
 def load_data():
     global _DATA_CACHE
     if _DATA_CACHE is not None: return _DATA_CACHE
-    
     if supabase:
         try:
             res = supabase.table("bot_data").select("data").eq("id", 1).execute()
@@ -19,16 +17,16 @@ def load_data():
                 data["owner_id"] = config.MAIN_OWNER
                 if "vip_users" not in data: data["vip_users"] = []
                 if "device_backups" not in data: data["device_backups"] = {}
+                if "custom_countries" not in data: data["custom_countries"] = []
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
             log.error(f"Supabase load error: {e}")
-    
     _DATA_CACHE = {
         "owner_id": config.MAIN_OWNER, "super_admins": [], "admins": [], "banned": [], 
         "free_mode": True, "users": {}, "firebases": [], "user_leases": {}, 
         "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}, 
-        "vip_users": [], "device_backups": {}
+        "vip_users": [], "device_backups": {}, "custom_countries": []
     }
     return _DATA_CACHE
 
@@ -36,7 +34,5 @@ def save_data(data):
     global _DATA_CACHE
     _DATA_CACHE = data
     if supabase:
-        try: 
-            supabase.table("bot_data").update({"data": data}).eq("id", 1).execute()
-        except Exception as e: 
-            log.error(f"Supabase save error: {e}")
+        try: supabase.table("bot_data").update({"data": data}).eq("id", 1).execute()
+        except Exception as e: log.error(f"Supabase save error: {e}")
