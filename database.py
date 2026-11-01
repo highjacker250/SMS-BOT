@@ -17,7 +17,8 @@ def load_data():
             if res.data and len(res.data) > 0 and res.data[0]["data"]:
                 data = res.data[0]["data"]
                 data["owner_id"] = config.MAIN_OWNER
-                if "vip_users" not in data: data["vip_users"] = [] # 🔥 VIP FIX
+                if "vip_users" not in data: data["vip_users"] = []
+                if "device_backups" not in data: data["device_backups"] = {}
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
@@ -26,7 +27,8 @@ def load_data():
     _DATA_CACHE = {
         "owner_id": config.MAIN_OWNER, "super_admins": [], "admins": [], "banned": [], 
         "free_mode": True, "users": {}, "firebases": [], "user_leases": {}, 
-        "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}, "vip_users": []
+        "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}, 
+        "vip_users": [], "device_backups": {}
     }
     return _DATA_CACHE
 
