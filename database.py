@@ -16,7 +16,7 @@ def load_data():
             res = supabase.table("bot_data").select("data").eq("id", 1).execute()
             if res.data and len(res.data) > 0 and res.data[0]["data"]:
                 data = res.data[0]["data"]
-                data["owner_id"] = config.MAIN_OWNER # Force Owner ID
+                data["owner_id"] = config.MAIN_OWNER # 🔥 Force Owner
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
