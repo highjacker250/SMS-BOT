@@ -18,6 +18,7 @@ def load_data():
                 if "vip_users" not in data: data["vip_users"] = []
                 if "device_backups" not in data: data["device_backups"] = {}
                 if "custom_countries" not in data: data["custom_countries"] = []
+                if "upcoming_timers" not in data: data["upcoming_timers"] = {}
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
@@ -26,7 +27,7 @@ def load_data():
         "owner_id": config.MAIN_OWNER, "super_admins": [], "admins": [], "banned": [], 
         "free_mode": True, "users": {}, "firebases": [], "user_leases": {}, 
         "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}, 
-        "vip_users": [], "device_backups": {}, "custom_countries": []
+        "vip_users": [], "device_backups": {}, "custom_countries": [], "upcoming_timers": {}
     }
     return _DATA_CACHE
 
