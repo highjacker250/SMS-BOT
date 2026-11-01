@@ -154,4 +154,4 @@ async def admin_bulk_done(msg: Message, state: FSMContext):
             f["label"] = f"Base {curr}"
             curr += 1
     db.save_data(d)
-    await msg.answer(f"✅ {added} Bases added!", reply_markup=admin_kb())1
+    await msg.answer(f"✅ {added} Bases added!", reply_markup=admin_kb())
