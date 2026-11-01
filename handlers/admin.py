@@ -97,7 +97,6 @@ async def admin_manage_fb(cq: CallbackQuery):
     kb.append([btn("back", "admin:home", "🔙")])
     await cq.message.edit_text(f"🔥 <b>{sc('manage servers')}</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
-# 🔥 FIXED: PARALLEL PING CHECK (No Hang)
 @admin_router.callback_query(F.data.startswith("admin:country:"))
 async def admin_country(cq: CallbackQuery):
     await cq.answer()
@@ -108,7 +107,6 @@ async def admin_country(cq: CallbackQuery):
     if not servers: 
         return await cq.message.edit_text(f"❌ No servers in {country}.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:manage_fb", "🔙")]]), parse_mode="HTML")
     
-    # Ping checks parallel me honge, ek saath
     async def get_ping(srv):
         try: return await fbu.check_ping(srv[0]["url"], srv[0].get("auth"))
         except: return "❌ Timeout"
@@ -134,21 +132,30 @@ async def admin_server(cq: CallbackQuery):
     try: await cq.message.edit_text("🔄 Fetching online counts...")
     except: pass
     
+    now = time.time()
     async def get_counts(fb):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
-        online = sum(1 for c in clients.values() if isinstance(c, dict) and c.get("status")) if clients else 0
+        online = sum(1 for c in clients.values() if isinstance(c, dict) and (c.get("status") is True or c.get("ping", {}).get("ts", 0) > (now - 900) * 1000)) if clients else 0
         total = len(clients) if clients else 0
         return online, total
 
     counts = await asyncio.gather(*[get_counts(fb) for fb in srv])
     
+    text = f"📁 <b>Server {idx+1} Bases:</b>\n\n"
     kb = []
+    
     for i, (online, total) in enumerate(counts):
-        kb.append([btn(f"base {i+1} ({online} ON / {total} Total)", f"admin:base:{country}:{idx}:{i}", "🗂")])
+        url = srv[i]['url']
+        url_short = url.replace("https://", "").replace("http://", "")
+        
+        text += f"🔹 <b>Base {i+1}:</b> {online} ON / {total} Total\n🔗 <code>{url_short}</code>\n\n"
+        
+        kb.append([btn(f"open base {i+1}", f"admin:base:{country}:{idx}:{i}", "🗂")])
         
     kb.append([btn("remove base", f"admin:rmmenu:{country}:{idx}", "🗑")])
     kb.append([btn("back", f"admin:country:{country}", "🔙")])
-    await cq.message.edit_text(f"📁 Server {idx+1} Bases:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @admin_router.callback_query(F.data.startswith("admin:base:"))
 async def admin_base(cq: CallbackQuery):
@@ -163,13 +170,18 @@ async def admin_base(cq: CallbackQuery):
     
     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
     kb = []
+    now = time.time()
+    
     if clients:
         for dev_id, c in clients.items():
-            if isinstance(c, dict) and c.get("status") is True: 
-                kb.append([btn(f"device {dev_id[:10]}", f"admin:dev:{country}:{srv_idx}:{base_idx}:{dev_id}", "📱")])
+            # 🔥 FIX: Admin and User same logic
+            if isinstance(c, dict):
+                is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 900) * 1000)
+                if is_online:
+                    kb.append([btn(f"device {dev_id[:10]}", f"admin:dev:{country}:{srv_idx}:{base_idx}:{dev_id}", "📱")])
                 
     kb.append([btn("back", f"admin:server:{country}:{srv_idx}", "🔙")])
-    if len(kb) == 1: return await cq.message.edit_text("❌ No online devices.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    if len(kb) == 1: return await cq.message.edit_text("❌ No online devices found.", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     await cq.message.edit_text(f"Base {base_idx+1} - Only Online Devices:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @admin_router.callback_query(F.data.startswith("admin:dev:"))
