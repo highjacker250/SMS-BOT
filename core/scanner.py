@@ -28,23 +28,29 @@ async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id):
     except Exception: pass
 
 async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id):
-    url = f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=1"
+    # Fetch top 5 messages to ensure we don't miss multiple simultaneous OTPs
+    url = f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5"
     msgs = await fbu.fetch_fb(url, auth)
     if not msgs: return last_msg_id
     
-    msg_id, msg = list(msgs.items())[0]
-    if not isinstance(msg, dict) or msg.get("type") != "incoming": return last_msg_id
+    highest_id = last_msg_id
+    sorted_msgs = sorted(msgs.values(), key=lambda x: int(x.get("id", 0)))
     
-    current_id = int(msg.get("id", 0))
-    if current_id > last_msg_id:
-        text = msg.get("message", "")
-        otp = fbu.extract_otp(text)
-        if otp:
-            service = fbu.extract_service_name(text, msg.get("sender", ""))
-            for uid in users:
-                await send_otp_to_user(bot, uid, service, otp, text, dev_id)
-        return current_id
-    return last_msg_id
+    for msg in sorted_msgs:
+        if not isinstance(msg, dict) or msg.get("type") != "incoming": continue
+        current_id = int(msg.get("id", 0))
+        
+        if current_id > last_msg_id:
+            text = msg.get("message", "")
+            otp = fbu.extract_otp(text)
+            if otp:
+                service = fbu.extract_service_name(text, msg.get("sender", ""))
+                for uid in users:
+                    await send_otp_to_user(bot, uid, service, otp, text, dev_id)
+            if current_id > highest_id:
+                highest_id = current_id
+                
+    return highest_id
 
 async def start_scanner(bot):
     log.info("Fast Scanner Started...")
@@ -87,7 +93,7 @@ async def start_scanner(bot):
                                 updated = True
                 if updated: db.save_data(d)
 
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(1.0) # 1s loop for ultra-fast delivery
         except Exception as e:
             log.error(f"Scanner error: {e}")
-            await asyncio.sleep(3)
+            await asyncio.sleep(1.0)
