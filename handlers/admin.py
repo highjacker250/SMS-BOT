@@ -46,8 +46,6 @@ async def admin_panel_cmd(msg: Message):
 async def admin_home(cq: CallbackQuery):
     await cq.answer()
     if not is_admin(cq.from_user.id): return
-    try: await cq.message.edit_text("🔄 Refreshing...")
-    except: pass
     await admin_home_msg(cq.message)
 
 @admin_router.callback_query(F.data == "admin:active_timers")
@@ -108,5 +106,51 @@ async def admin_track_device_done(msg: Message, state: FSMContext):
         text += f"{stat} 🆔 <code>{dev_id}</code>\n🔗 <code>{fb['url']}</code>\n\n"
     await status.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), parse_mode="HTML")
 
-# ... (Baaki admin handlers: manage_fb, country, server, base, dev, rmmenu, rmdo, add_country, dead_filter, add_bulk same rahenge) ...
-# Include the same code as previous version for these functions
+@admin_router.callback_query(F.data == "admin:manage_fb")
+async def admin_manage_fb(cq: CallbackQuery):
+    await cq.answer()
+    if not is_admin(cq.from_user.id): return
+    d = db.load_data()
+    countries = get_countries(d)
+    kb = [[btn(c, f"admin:country:{c}", "🌍")] for c in countries]
+    kb.append([btn("add country", "admin:add_country", "➕"), btn("dead filter", "admin:dead_filter", "☠️")])
+    kb.append([btn("add bulk urls", "admin:add_bulk", "➕")])
+    kb.append([btn("back", "admin:home", "🔙")])
+    try: await cq.message.edit_text(f"🔥 <b>{sc('manage servers')}</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    except: pass
+
+@admin_router.callback_query(F.data.startswith("admin:country:"))
+async def admin_country(cq: CallbackQuery):
+    await cq.answer()
+    country = cq.data.split(":")[2]
+    d = db.load_data()
+    servers = get_servers_grouped(d, country)
+    if not servers: return await cq.message.edit_text(f"❌ No servers in {country}.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:manage_fb", "🔙")]]), parse_mode="HTML")
+    async def get_ping(srv):
+        try: return await fbu.check_ping(srv[0]["url"], srv[0].get("auth"))
+        except: return "❌ Timeout"
+    pings = await asyncio.gather(*[get_ping(srv) for srv in servers])
+    kb = []
+    for i, (srv, ping) in enumerate(zip(servers, pings)):
+        kb.append([btn(f"server {i+1} ({ping})", f"admin:server:{country}:{i}", "📁")])
+    kb.append([btn("back", "admin:manage_fb", "🔙")])
+    await cq.message.edit_text(f"🌍 {country} - <b>{sc('servers')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@admin_router.callback_query(F.data.startswith("admin:server:"))
+async def admin_server(cq: CallbackQuery):
+    await cq.answer()
+    parts = cq.data.split(":")
+    country, idx = parts[2], int(parts[3])
+    d = db.load_data()
+    servers = get_servers_grouped(d, country)
+    if idx >= len(servers): return
+    srv = servers[idx]
+    try: await cq.message.edit_text("🔄 Fetching online counts...")
+    except: pass
+    async def get_counts(fb):
+        clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+        online = sum(1 for c in clients.values() if isinstance(c, dict) and c.get("status") is True) if clients else 0
+        total = len(clients) if clients else 0
+        return online, total
+    counts = await asyncio.gather(*[get_counts(fb) for fb in srv])
+    text = f"
