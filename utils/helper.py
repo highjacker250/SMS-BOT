@@ -15,7 +15,9 @@ def clear_user_lease(uid):
         db.save_data(d)
 
 def get_countries(data):
-    return sorted(list(set([fb.get("country", "India") for fb in data.get("firebases", [])])))
+    fb_countries = [fb.get("country", "India") for fb in data.get("firebases", [])]
+    custom_countries = data.get("custom_countries", [])
+    return sorted(list(set(fb_countries + custom_countries)))
 
 def get_servers_grouped(data, country: str):
     fbs = [fb for fb in data.get("firebases", []) if fb.get("country", "India") == country]
