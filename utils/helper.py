@@ -1,4 +1,5 @@
 import database as db
+from datetime import datetime, timedelta
 
 def is_owner(uid):
     d = db.load_data()
@@ -22,3 +23,7 @@ def get_countries(data):
 def get_servers_grouped(data, country: str):
     fbs = [fb for fb in data.get("firebases", []) if fb.get("country", "India") == country]
     return [fbs[i:i+25] for i in range(0, len(fbs), 25)]
+
+def get_ist_time_str(ts):
+    ist = datetime.utcfromtimestamp(ts) + timedelta(hours=5, minutes=30)
+    return ist.strftime("%d %b %Y | %I:%M %p")
