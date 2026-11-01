@@ -19,12 +19,19 @@ async def web_server():
 
 async def main():
     await web_server()
+    
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
+    
+    # Routers include karo
     dp.include_routers(owner_router, admin_router, user_router)
+    
+    # Background tasks start karo (bot pass karna zaroori hai)
     asyncio.create_task(start_scanner(bot))
-    asyncio.create_task(backup_scanner()) # 🔥 Background Scanner Started
+    asyncio.create_task(backup_scanner(bot))
+    
+    # Polling start karo
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main(bot))
+    asyncio.run(main())
