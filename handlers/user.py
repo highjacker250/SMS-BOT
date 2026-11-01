@@ -35,7 +35,7 @@ async def cmd_start(msg: Message):
 
 @user_router.callback_query(F.data == "user:home")
 async def user_home(cq: CallbackQuery):
-    await cq.answer() # Fast response
+    await cq.answer()
     clear_user_lease(cq.from_user.id)
     try: await cq.message.edit_text(f"👋 <b>{sc('main menu')}</b>", reply_markup=main_kb(), parse_mode="HTML")
     except: pass
@@ -120,11 +120,15 @@ async def user_server(cq: CallbackQuery):
     last_id = int(msgs[-1].get("id", 0)) if msgs else 0
     
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
+    health = fbu.calculate_health(msgs) # 🔥 Real Health
     base_label = fb.get("label", f"Base {fb_i+1}")
+    
+    # Save top number in lease for History
+    top_num = best_nums[0][0] if best_nums else "Unknown"
     
     data["user_leases"][str(uid)] = {
         "dev_id": dev_id, "fb_url": fb["url"], "base_idx": base_label, "numbers": [n for n, c in best_nums],
-        "expire_at": int(time.time()) + 3600, "health": 10, "last_msg_id": last_id
+        "expire_at": int(time.time()) + 3600, "health": health, "last_msg_id": last_id, "top_number": top_num
     }
     db.save_data(data)
     
@@ -142,12 +146,11 @@ async def user_server(cq: CallbackQuery):
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
     
+    # 🔥 Compact UI
     text = (
         f"📱 <b>{sc('number details')}</b>\n"
-        f"🔥 {sc('server')}: {idx+1} | {base_label}\n"
-        f"🆔 {sc('rent id')}: <code>{dev_id}</code>{rep_mark}\n"
-        f"⚙️ {sc('code')}: <code>{battery}T</code>\n"
-        f"❤️ {sc('health')}: <b>10/10</b>\n\n"
+        f"🔥 Server: {idx+1} | {base_label}\n"
+        f"🆔 <code>{dev_id[:12]}...</code>{rep_mark} | ⚙️ <code>{battery}T</code> | ❤️ <b>{health}/10</b>\n\n"
         f"{nums_text}"
     )
     
@@ -166,11 +169,9 @@ async def user_info(cq: CallbackQuery):
     if not lease or lease.get("dev_id") != dev_id: return await cq.answer("Lease expired!", show_alert=True)
     
     if cq.from_user.id == config.MAIN_OWNER or is_owner(cq.from_user.id):
-        # Owner gets full details
-        await cq.answer(f"ℹ️ Full Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: 10/10\nURL: {lease.get('fb_url')}", show_alert=True)
+        await cq.answer(f"ℹ️ Full Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: {lease.get('health')}/10\nURL: {lease.get('fb_url')}", show_alert=True)
     else:
-        # User gets hidden URL
-        await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: 10/10\n\n🔒 URL hidden for security.", show_alert=True)
+        await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: {lease.get('health')}/10\n\n🔒 URL hidden for security.", show_alert=True)
 
 @user_router.callback_query(F.data.startswith("user:save:"))
 async def user_save(cq: CallbackQuery):
@@ -223,15 +224,12 @@ async def user_access(cq: CallbackQuery):
         return await cq.message.edit_text("❌ Device offline or removed. Try after some time.", show_alert=True)
         
     d["user_leases"][str(uid)] = {
-        "dev_id": info["dev_id"], "fb_url": info["fb_url"], "base_idx": info.get("base_idx"), "numbers": [key], "expire_at": int(time.time()) + 3600, "last_msg_id": 0
+        "dev_id": info["dev_id"], "fb_url": info["fb_url"], "base_idx": info.get("base_idx"), "numbers": [key], "expire_at": int(time.time()) + 3600, "last_msg_id": 0, "top_number": key
     }
     db.save_data(d)
     
-    text = f"📱 <b>{sc('re-accessed device')}</b>\n🆔 {sc('rent id')}: <code>{info['dev_id']}</code>\n📞 {sc('number')}: <code>+91{key}</code>"
-    kb = [
-        [btn("stop", "user:stop", "⏹")], 
-        [btn("main menu", "user:home", "🏠")]
-    ]
+    text = f"📱 <b>{sc('re-accessed device')}</b>\n🆔 <code>{info['dev_id'][:12]}...</code>\n📞 <code>+91{key}</code>"
+    kb = [[btn("stop", "user:stop", "⏹")], [btn("main menu", "user:home", "🏠")]]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @user_router.callback_query(F.data == "user:stop")
@@ -246,7 +244,17 @@ async def user_history(cq: CallbackQuery):
     d = db.load_data()
     hist = d["users"].get(str(cq.from_user.id), {}).get("otp_history", [])
     text = "📜 <b>OTP History</b>\n\n"
-    if not hist: text += "No history."
-    for h in hist:
-        text += f"🕒 {time.strftime('%H:%M', time.localtime(h['time']))} | {h['service']} | <code>{h['otp']}</code>\n"
+    if not hist: 
+        text += "No history."
+    else:
+        for h in hist:
+            time_str = fbu.get_ist_time_str(h['time'])
+            num = h.get('number', 'Unknown')
+            text += (
+                f"📅 <b>{time_str}</b>\n"
+                f"📱 {h['service']}\n"
+                f"📞 <code>+91{num}</code>\n"
+                f"🔑 <code>{h['otp']}</code>\n"
+                f"───────────────\n"
+            )
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
