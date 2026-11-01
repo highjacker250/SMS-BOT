@@ -13,10 +13,8 @@ admin_router = Router()
 
 def admin_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [btn("enter as user", "user:home", "👤"), btn("analytics", "admin:analytics", "📊")],
-        [btn("manage servers", "admin:manage_fb", "🔥"), btn("manage bots", "admin:bots", "🤖")],
-        [btn("manage admins", "admin:admins", "🛡"), btn("broadcast", "admin:broadcast", "📢")],
-        [btn("view users", "admin:users", "👥"), btn("track device", "admin:track_device", "🔍")],
+        [btn("enter as user", "user:home", "👤"), btn("manage servers", "admin:manage_fb", "🔥")],
+        [btn("track device", "admin:track_device", "🔍"), btn("manage vips", "admin:vip", "⭐")],
         [btn("refresh panel", "admin:home", "🔄")]
     ])
 
@@ -51,39 +49,27 @@ async def admin_home(cq: CallbackQuery):
     except: pass
     await admin_home_msg(cq.message)
 
-# 🔥 FIXED BUTTONS
-@admin_router.callback_query(F.data == "admin:analytics")
-async def admin_analytics(cq: CallbackQuery):
-    await cq.answer("Analytics feature coming soon!", show_alert=True)
+# 🔥 VIP SYSTEM
+@admin_router.callback_query(F.data == "admin:vip")
+async def admin_vip(cq: CallbackQuery):
+    await cq.answer()
+    d = db.load_data()
+    vips = d.get("vip_users", [])
+    text = f"⭐ <b>Manage VIPs</b>\n\nTotal VIPs: {len(vips)}\n\nUse <code>/addvip &lt;id&gt;</code> to add a new VIP."
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), parse_mode="HTML")
 
-@admin_router.callback_query(F.data == "admin:bots")
-async def admin_bots(cq: CallbackQuery):
-    await cq.answer("Manage Bots feature coming soon!", show_alert=True)
-
-@admin_router.callback_query(F.data == "admin:admins")
-async def admin_admins(cq: CallbackQuery):
-    await cq.answer("Manage Admins feature coming soon!", show_alert=True)
-
-@admin_router.callback_query(F.data == "admin:broadcast")
-async def admin_broadcast(cq: CallbackQuery):
-    await cq.answer("Broadcast feature coming soon!", show_alert=True)
-
-@admin_router.callback_query(F.data == "admin:users")
-async def admin_users(cq: CallbackQuery):
-    await cq.answer("View Users feature coming soon!", show_alert=True)
-
-# 🔥 TRACKER
+# 🔥 DEVICE TRACKER (HTML Tags Fixed)
 @admin_router.callback_query(F.data == "admin:track_device")
 async def admin_track_device(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
     await state.set_state(S.track_query)
-    await cq.message.edit_text("🔍 <b>Device Tracker</b>\n\nSend Rent ID or Mobile Number:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:home", "❌")]]))
+    await cq.message.edit_text("🔍 <b>Device Tracker</b>\n\nSend Rent ID or Mobile Number:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:home", "❌")]]), parse_mode="HTML")
 
 @admin_router.message(S.track_query)
 async def admin_track_device_done(msg: Message, state: FSMContext):
     await state.clear()
     query = msg.text.strip()
-    status = await msg.answer(f"🔄 Searching for <code>{query}</code>...")
+    status = await msg.answer(f"🔄 Searching for <code>{query}</code>...", parse_mode="HTML")
     d = db.load_data()
     found = []
     async def check_fb(fb):
@@ -95,7 +81,7 @@ async def admin_track_device_done(msg: Message, state: FSMContext):
     tasks = [check_fb(fb) for fb in d.get("firebases", [])]
     await asyncio.gather(*tasks)
     
-    if not found: return await status.edit_text(f"❌ No device found for <code>{query}</code>.")
+    if not found: return await status.edit_text(f"❌ No device found for <code>{query}</code>.", parse_mode="HTML")
     text = f"🔍 <b>Result ({len(found)}):</b>\n\n"
     for fb, dev_id, c in found[:5]:
         text += f"🆔 <code>{dev_id}</code>\n🔗 <code>{fb['url']}</code>\n🟢 {c.get('status')}\n\n"
