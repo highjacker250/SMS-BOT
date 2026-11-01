@@ -31,8 +31,8 @@ async def cmd_start(msg: Message):
         db.save_data(d)
 
     if uid == config.MAIN_OWNER or is_owner(uid):
-        from handlers.admin import get_admin_text, admin_kb
-        await msg.answer(get_admin_text(), reply_markup=admin_kb(), parse_mode="HTML")
+        from handlers.admin import admin_home_msg
+        await admin_home_msg(msg)
         return
 
     await msg.answer(f"👋 <b>{sc('welcome to dark otp bot')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(), parse_mode="HTML")
@@ -68,7 +68,7 @@ async def user_country(cq: CallbackQuery):
         kb.append([btn(f"server {i+1} ({ping})", f"user:server:{country}:{i}", "📁")])
     kb.append([btn("back", "user:get_num", "🔙")])
     await cq.message.edit_text(f"🌍 {country} - <b>{sc('servers')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-
+2
 @user_router.callback_query(F.data.startswith("user:server:"))
 async def user_server(cq: CallbackQuery):
     await cq.answer()
