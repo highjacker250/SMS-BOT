@@ -7,7 +7,6 @@ import database as db
 import firebase_utils as fbu
 from utils.ui import sc, btn
 from utils.helper import clear_user_lease, get_countries, get_servers_grouped, is_owner
-from states import S
 import config
 
 user_router = Router()
@@ -27,7 +26,6 @@ async def cmd_start(msg: Message):
         d["users"][str(uid)] = {"name": msg.from_user.full_name, "joined": int(time.time()), "otp_history": [], "saved_numbers": {}}
         db.save_data(d)
 
-    # 🔥 HARDCODED OWNER CHECK
     if uid == config.MAIN_OWNER or is_owner(uid):
         from handlers.admin import admin_home_msg
         await admin_home_msg(msg)
@@ -35,28 +33,20 @@ async def cmd_start(msg: Message):
 
     await msg.answer(f"👋 <b>{sc('welcome to dark otp bot')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(), parse_mode="HTML")
 
-@user_router.message(Command("getnum"))
-async def cmd_getnum(msg: Message):
-    class FakeCq:
-        from_user = msg.from_user
-        message = msg
-        data = "user:get_num"
-        async def answer(self, text, **kwargs): pass
-        async def edit_text(self, text, **kwargs): await msg.answer(text, **kwargs)
-    await user_get_num(FakeCq())
-
 @user_router.callback_query(F.data == "user:home")
 async def user_home(cq: CallbackQuery):
+    await cq.answer() # Fast response
     clear_user_lease(cq.from_user.id)
     try: await cq.message.edit_text(f"👋 <b>{sc('main menu')}</b>", reply_markup=main_kb(), parse_mode="HTML")
     except: pass
 
 @user_router.callback_query(F.data == "user:get_num")
 async def user_get_num(cq: CallbackQuery):
+    await cq.answer()
     clear_user_lease(cq.from_user.id)
     d = db.load_data()
     countries = get_countries(d)
-    if not countries: return await cq.answer("❌ No servers available.", show_alert=True)
+    if not countries: return await cq.message.edit_text("❌ No servers available.", parse_mode="HTML")
     
     kb = [[btn(c, f"user:country:{c}", "🌍")] for c in countries]
     kb.append([btn("main menu", "user:home", "🏠")])
@@ -64,10 +54,11 @@ async def user_get_num(cq: CallbackQuery):
 
 @user_router.callback_query(F.data.startswith("user:country:"))
 async def user_country(cq: CallbackQuery):
+    await cq.answer()
     country = cq.data.split(":")[2]
     d = db.load_data()
     servers = get_servers_grouped(d, country)
-    if not servers: return await cq.answer("No servers in this country.")
+    if not servers: return await cq.message.edit_text("No servers in this country.")
     
     kb = []
     for i, srv in enumerate(servers):
@@ -78,6 +69,7 @@ async def user_country(cq: CallbackQuery):
 
 @user_router.callback_query(F.data.startswith("user:server:"))
 async def user_server(cq: CallbackQuery):
+    await cq.answer()
     parts = cq.data.split(":")
     country, idx = parts[2], int(parts[3])
     uid = cq.from_user.id
@@ -85,7 +77,7 @@ async def user_server(cq: CallbackQuery):
     
     d = db.load_data()
     servers = get_servers_grouped(d, country)
-    if idx >= len(servers): return await cq.answer("Server not found!")
+    if idx >= len(servers): return await cq.message.edit_text("Server not found!")
     
     try: await cq.message.edit_text(f"🔄 {sc('fetching fresh number')}...", parse_mode="HTML")
     except: pass
@@ -117,7 +109,7 @@ async def user_server(cq: CallbackQuery):
     if available: fb_i, fb, dev_id, dev_data = random.choice(available)
     elif repeat: fb_i, fb, dev_id, dev_data = random.choice(repeat); is_rep = True
     elif all_devs: fb_i, fb, dev_id, dev_data = random.choice(all_devs); is_rep = True
-    else: return await cq.answer("❌ No online lines in this server.", show_alert=True)
+    else: return await cq.message.edit_text("❌ No online lines in this server.", parse_mode="HTML")
         
     used[dev_id] = now
     data = db.load_data()
@@ -125,7 +117,7 @@ async def user_server(cq: CallbackQuery):
     
     msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=100", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
-    last_id = int(msgs[0].get("id", 0)) if msgs else 0
+    last_id = int(msgs[-1].get("id", 0)) if msgs else 0
     
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
     base_label = fb.get("label", f"Base {fb_i+1}")
@@ -143,7 +135,6 @@ async def user_server(cq: CallbackQuery):
     if best_nums:
         for n, c in best_nums:
             nums_text += f"📞 <code>+91{n}</code> | Conf: <b>{c}%</b>\n"
-            # 🔥 EMOJI REMOVED FROM COPY BUTTON
             kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
     else:
         nums_text = f"⚠️ <b>{sc('no numbers found. waiting for otp...')}</b>"
@@ -151,7 +142,6 @@ async def user_server(cq: CallbackQuery):
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
     
-    # 🔥 TIMER REMOVED
     text = (
         f"📱 <b>{sc('number details')}</b>\n"
         f"🔥 {sc('server')}: {idx+1} | {base_label}\n"
@@ -161,7 +151,6 @@ async def user_server(cq: CallbackQuery):
         f"{nums_text}"
     )
     
-    # 🔥 COPY RENT ID BUTTON REMOVED
     kb = kb_nums + [
         [btn("info", f"user:info:{dev_id}", "ℹ️"), btn("save number", f"user:save:{dev_id}", "⭐")],
         [btn("next number", f"user:server:{country}:{idx}", "🔄"), btn("stop", "user:stop", "⏹")],
@@ -174,8 +163,14 @@ async def user_info(cq: CallbackQuery):
     dev_id = cq.data.split(":")[2]
     d = db.load_data()
     lease = d.get("user_leases", {}).get(str(cq.from_user.id), {})
-    if not lease or lease.get("dev_id") != dev_id: return await cq.answer("Lease expired!")
-    await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: 10/10\n\n🔒 URL hidden for security.", show_alert=True)
+    if not lease or lease.get("dev_id") != dev_id: return await cq.answer("Lease expired!", show_alert=True)
+    
+    if cq.from_user.id == config.MAIN_OWNER or is_owner(cq.from_user.id):
+        # Owner gets full details
+        await cq.answer(f"ℹ️ Full Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: 10/10\nURL: {lease.get('fb_url')}", show_alert=True)
+    else:
+        # User gets hidden URL
+        await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nHealth: 10/10\n\n🔒 URL hidden for security.", show_alert=True)
 
 @user_router.callback_query(F.data.startswith("user:save:"))
 async def user_save(cq: CallbackQuery):
@@ -183,7 +178,7 @@ async def user_save(cq: CallbackQuery):
     uid = cq.from_user.id
     d = db.load_data()
     lease = d.get("user_leases", {}).get(str(uid), {})
-    if not lease or lease.get("dev_id") != dev_id: return await cq.answer("❌ Lease expired!")
+    if not lease or lease.get("dev_id") != dev_id: return await cq.answer("❌ Lease expired!", show_alert=True)
     
     nums = lease.get("numbers", [])
     save_key = nums[0] if nums else dev_id
@@ -192,10 +187,11 @@ async def user_save(cq: CallbackQuery):
         "dev_id": dev_id, "fb_url": lease["fb_url"], "base_idx": lease.get("base_idx"), "time": int(time.time())
     }
     db.save_data(d)
-    await cq.answer("⭐ Saved to My Numbers!")
+    await cq.answer("⭐ Saved to My Numbers!", show_alert=True)
 
 @user_router.callback_query(F.data == "user:saved")
 async def user_saved_list(cq: CallbackQuery):
+    await cq.answer()
     uid = cq.from_user.id
     d = db.load_data()
     saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
@@ -210,30 +206,28 @@ async def user_saved_list(cq: CallbackQuery):
 
 @user_router.callback_query(F.data.startswith("user:access:"))
 async def user_access(cq: CallbackQuery):
+    await cq.answer()
     key = cq.data.split(":")[2]
     uid = cq.from_user.id
     d = db.load_data()
     saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
-    if key not in saved: return await cq.answer("Not found!")
+    if key not in saved: return await cq.message.edit_text("Not found!")
     info = saved[key]
     if time.time() - info["time"] > 86400:
         del saved[key]
         db.save_data(d)
-        return await cq.answer("❌ 24 hours complete. Number expired.", show_alert=True)
+        return await cq.message.edit_text("❌ 24 hours complete. Number expired.", show_alert=True)
         
     clients = await fbu.fetch_fb(f"{info['fb_url']}/clients.json")
     if not (clients and info["dev_id"] in clients):
-        return await cq.answer("❌ Device offline or removed. Try after some time.", show_alert=True)
+        return await cq.message.edit_text("❌ Device offline or removed. Try after some time.", show_alert=True)
         
     d["user_leases"][str(uid)] = {
         "dev_id": info["dev_id"], "fb_url": info["fb_url"], "base_idx": info.get("base_idx"), "numbers": [key], "expire_at": int(time.time()) + 3600, "last_msg_id": 0
     }
     db.save_data(d)
     
-    # 🔥 TIMER REMOVED
     text = f"📱 <b>{sc('re-accessed device')}</b>\n🆔 {sc('rent id')}: <code>{info['dev_id']}</code>\n📞 {sc('number')}: <code>+91{key}</code>"
-    
-    # 🔥 COPY RENT ID BUTTON REMOVED
     kb = [
         [btn("stop", "user:stop", "⏹")], 
         [btn("main menu", "user:home", "🏠")]
@@ -248,6 +242,7 @@ async def user_stop(cq: CallbackQuery):
 
 @user_router.callback_query(F.data == "user:history")
 async def user_history(cq: CallbackQuery):
+    await cq.answer()
     d = db.load_data()
     hist = d["users"].get(str(cq.from_user.id), {}).get("otp_history", [])
     text = "📜 <b>OTP History</b>\n\n"
