@@ -12,29 +12,37 @@ from states import S
 log = logging.getLogger("Admin")
 admin_router = Router()
 
+# 🚨 FIX: Strict Real Online Lines
 async def get_online_stats(firebases):
     total_online = 0
     total_devices = 0
     
     async def check_fb(fb):
         try:
+            url = f"{fb['url']}/clients.json"
+            if fb.get("auth"): url += f"&auth={fb['auth']}" if "?" in url else f"?auth={fb['auth']}"
+            
             async with aiohttp.ClientSession() as session:
-                url = f"{fb['url']}/clients.json?shallow=true"
-                if fb.get("auth"): url += f"&auth={fb['auth']}"
-                async with session.get(url, timeout=5) as resp:
+                async with session.get(url, timeout=15) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data and isinstance(data, dict):
-                            return len(data)
-        except: pass
-        return 0
+                            online = 0
+                            total = len(data)
+                            for dev in data.values():
+                                if isinstance(dev, dict) and dev.get("status") is True:
+                                    online += 1
+                            return online, total
+        except Exception as e: 
+            pass
+        return 0, 0
 
     tasks = [check_fb(fb) for fb in firebases]
     results = await asyncio.gather(*tasks)
     
-    for count in results:
-        total_devices += count
-        if count > 0: total_online += count
+    for online, total in results:
+        total_online += online
+        total_devices += total
             
     return total_online, total_devices
 
@@ -51,10 +59,10 @@ async def admin_home_msg(msg: Message):
     fbs = d.get("firebases", [])
     countries = get_countries(d)
     users_count = len(d.get("users", {}))
-    
-    # 🚨 FIX: Calculate real servers (groups of 25) and total bases
     total_servers = sum(len(get_servers_grouped(d, c)) for c in countries)
-    total_bases = len(fbs)
+    
+    # Delete the status msg before fetching to prevent spam
+    status_msg = await msg.answer("🔄 Fetching live stats...")
     
     online_cnt, total_lines = await get_online_stats(fbs)
     
@@ -62,12 +70,14 @@ async def admin_home_msg(msg: Message):
         f"👑 <b>{sc('admin dashboard')}</b>\n\n"
         f"🌍 {sc('countries')}: <b>{len(countries)}</b>\n"
         f"🔥 {sc('total servers')}: <b>{total_servers}</b>\n"
-        f"🗂 {sc('total bases')}: <b>{total_bases}</b>\n"
+        f"🗂 {sc('total bases')}: <b>{len(fbs)}</b>\n"
         f"📱 {sc('online lines')}: <b>{online_cnt}</b> / {total_lines}\n"
         f"👥 {sc('total users')}: <b>{users_count}</b>\n\n"
         f"<i>{sc('select an option below to manage the bot')}</i>"
     )
-    try: await msg.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
+    try: 
+        await status_msg.delete()
+        await msg.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
     except: pass
 
 @admin_router.message(Command("admin"))
