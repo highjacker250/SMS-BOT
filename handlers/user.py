@@ -137,8 +137,29 @@ async def user_service(cq: CallbackQuery):
                 parse_mode="HTML"
             )
             
-        sorted_devs = sorted(ready.items(), key=lambda x: x[1].get("sort_id", 0), reverse=True)
-        dev_id, dev_data = sorted_devs[0]
+        # 🚨 SMART RANDOMIZATION: User ke used_devices check karo
+        used = d.setdefault("used_devices", {}).setdefault(str(uid), {})
+        now = int(time.time())
+        
+        # Sirf wo numbers lo jo 24 ghante me use nahi hue
+        available_lines = []
+        for dev_id, data in ready.items():
+            last_used = used.get(dev_id, 0)
+            if now - last_used > 86400: # 24 hours
+                available_lines.append((dev_id, data))
+        
+        # Agar saare use ho gaye hain, to purane wale dedo (par error mat do)
+        if not available_lines:
+            available_lines = list(ready.items())
+        
+        # Randomly pick karo
+        dev_id, dev_data = random.choice(available_lines)
+        
+        # Mark as used
+        used[dev_id] = now
+        data = db.load_data()
+        data["used_devices"][str(uid)] = used
+        
         chance = dev_data["chance"]
         fb_url = dev_data["fb_url"]
         fb_i = 1 
@@ -190,7 +211,6 @@ async def user_service(cq: CallbackQuery):
     real_health = dev_data.get("health", 10) if service == "whatsapp" else fbu.calculate_health(msgs)
     top_num = best_nums[0][0] if best_nums else "Unknown"
     
-    # 🚨 Save service_filter here
     data["user_leases"][str(uid)] = {
         "dev_id": dev_id, "fb_url": fb_url, "base_idx": base_label, "numbers": [n for n, c in best_nums],
         "expire_at": int(time.time()) + 3600, "health": real_health, "last_msg_id": 0, "top_number": top_num,
@@ -229,52 +249,6 @@ async def user_service(cq: CallbackQuery):
     try:
         await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
     except: pass
-
-# --- UPCOMING OTPs CLICKABLE LOGIC ---
-@user_router.callback_query(F.data == "user:upcoming")
-async def user_upcoming(cq: CallbackQuery):
-    await cq.answer()
-    d = db.load_data()
-    timers = d.get("upcoming_timers", {})
-    user_timers = {k: v for k, v in timers.items() if v.get("user_id") == cq.from_user.id}
-    
-    if not user_timers:
-        return await cq.message.edit_text("📅 <b>Upcoming OTPs</b>\n\nKoi timer set nahi hai.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]), parse_mode="HTML")
-        
-    kb = []
-    for k, t in user_timers.items():
-        kb.append([btn(f"+91{t['number']} | {get_ist_time_str(t['target_time'])}", f"user:click_timer:{k}", "⏰")])
-    
-    kb.append([btn("main menu", "user:main_menu", "🏠")])
-    await cq.message.edit_text("📅 <b>Upcoming OTPs</b>\n\nNumber pe click karein details dekhne ke liye:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-
-@user_router.callback_query(F.data.startswith("user:click_timer:"))
-async def user_click_timer(cq: CallbackQuery):
-    await cq.answer()
-    timer_id = cq.data.split(":")[2]
-    d = db.load_data()
-    timer = d.get("upcoming_timers", {}).get(timer_id)
-    
-    if not timer:
-        return await cq.answer("❌ Timer expired or not found.", show_alert=True)
-
-    num = timer['number']
-    rent_id = timer['rent_id']
-    target_time = timer['target_time']
-    
-    text = (
-        f"⏰ <b>{sc('timer details')}</b>\n\n"
-        f"📞 <b>{sc('number')}:</b> <code>+91{num}</code>\n"
-        f"🆔 <b>{sc('rent id')}:</b> <code>{rent_id}</code>\n"
-        f"🕒 <b>{sc('target time')}:</b> {get_ist_time_str(target_time)}\n\n"
-        f"<i>{sc('waiting for otp...')}</i>"
-    )
-    
-    kb = [
-        [InlineKeyboardButton(text=f"Copy +91{num}", copy_text=CopyTextButton(text=f"+91{num}"))],
-        [btn("back", "user:upcoming", "🔙")]
-    ]
-    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 # --- NORMAL USER SERVER CLICK ---
 @user_router.callback_query(F.data.startswith("user:server:"))
@@ -341,7 +315,7 @@ async def user_server(cq: CallbackQuery):
     data["user_leases"][str(uid)] = {
         "dev_id": dev_id, "fb_url": fb["url"], "base_idx": base_label, "numbers": [n for n, c in best_nums],
         "expire_at": int(time.time()) + 3600, "health": real_health, "last_msg_id": last_id, "top_number": top_num,
-        "service_filter": "any" # Normal server click me any service
+        "service_filter": "any" 
     }
     db.save_data(data)
     
@@ -382,4 +356,15 @@ async def user_info(cq: CallbackQuery):
     lease = d.get("user_leases", {}).get(str(cq.from_user.id), {})
     if not lease or lease.get("dev_id") != dev_id: return await cq.answer("Lease expired!", show_alert=True)
     
-    is_vip = cq.from_user.id in d.get("vip_users", []) or is_owner(cq.from
+    is_vip = cq.from_user.id in d.get("vip_users", []) or is_owner(cq.from_user.id)
+    if is_vip:
+        await cq.answer(f"ℹ️ VIP Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\nURL: {lease.get('fb_url')}", show_alert=True)
+    else:
+        await cq.answer(f"ℹ️ Info:\nRent ID: {dev_id}\nBase: {lease.get('base_idx')}\n\n🔒 URL hidden.", show_alert=True)
+
+@user_router.callback_query(F.data.startswith("user:save:"))
+async def user_save(cq: CallbackQuery):
+    dev_id = cq.data.split(":")[2]
+    uid = cq.from_user.id
+    d = db.load_data()
+    lease = d.get
