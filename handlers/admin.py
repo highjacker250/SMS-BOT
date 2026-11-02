@@ -12,7 +12,7 @@ from states import S
 log = logging.getLogger("Admin")
 admin_router = Router()
 
-# 🚨 FIX: Real Online Lines (Strict Status Check)
+# 🚨 REAL ONLINE STATS FIX
 async def get_online_stats(firebases):
     total_online = 0
     total_devices = 0
@@ -27,16 +27,13 @@ async def get_online_stats(firebases):
                     if resp.status == 200:
                         data = await resp.json()
                         if data and isinstance(data, dict):
-                            online = 0
-                            for dev in data.values():
-                                if isinstance(dev, dict) and dev.get("status") is True:
-                                    online += 1
+                            # Check karo status true hai ya nahi
+                            online = sum(1 for d in data.values() if isinstance(d, dict) and d.get("status") is True)
                             return online, len(data)
-        except Exception as e:
-            pass
+        except: pass
         return 0, 0
 
-    # Chunking logic to prevent Timeout
+    # Chunking taaki Render timeout na de
     for i in range(0, len(firebases), 5):
         chunk = firebases[i:i+5]
         tasks = [check_fb(fb) for fb in chunk]
