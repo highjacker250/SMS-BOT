@@ -3,7 +3,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 import config
-from core.scanner import start_scanner, backup_scanner
+from core.scanner import start_scanner, backup_scanner, whatsapp_scanner # 👈 Naya import
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
@@ -23,14 +23,13 @@ async def main():
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     
-    # Routers include karo
     dp.include_routers(owner_router, admin_router, user_router)
     
-    # Background tasks start karo (bot pass karna zaroori hai)
+    # 🚨 Teeno scanners start karo
     asyncio.create_task(start_scanner(bot))
     asyncio.create_task(backup_scanner(bot))
+    asyncio.create_task(whatsapp_scanner(bot)) # 👈 WhatsApp scanner
     
-    # Polling start karo
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
