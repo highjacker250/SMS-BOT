@@ -12,7 +12,7 @@ from states import S
 log = logging.getLogger("Admin")
 admin_router = Router()
 
-# 🚨 FIX: Strict Real Online Lines
+# 🚨 FIX: Real Online Lines (Strict Status Check)
 async def get_online_stats(firebases):
     total_online = 0
     total_devices = 0
@@ -28,21 +28,22 @@ async def get_online_stats(firebases):
                         data = await resp.json()
                         if data and isinstance(data, dict):
                             online = 0
-                            total = len(data)
                             for dev in data.values():
                                 if isinstance(dev, dict) and dev.get("status") is True:
                                     online += 1
-                            return online, total
-        except Exception as e: 
+                            return online, len(data)
+        except Exception as e:
             pass
         return 0, 0
 
-    tasks = [check_fb(fb) for fb in firebases]
-    results = await asyncio.gather(*tasks)
-    
-    for online, total in results:
-        total_online += online
-        total_devices += total
+    # Chunking logic to prevent Timeout
+    for i in range(0, len(firebases), 5):
+        chunk = firebases[i:i+5]
+        tasks = [check_fb(fb) for fb in chunk]
+        results = await asyncio.gather(*tasks)
+        for online, total in results:
+            total_online += online
+            total_devices += total
             
     return total_online, total_devices
 
@@ -61,9 +62,7 @@ async def admin_home_msg(msg: Message):
     users_count = len(d.get("users", {}))
     total_servers = sum(len(get_servers_grouped(d, c)) for c in countries)
     
-    # Delete the status msg before fetching to prevent spam
     status_msg = await msg.answer("🔄 Fetching live stats...")
-    
     online_cnt, total_lines = await get_online_stats(fbs)
     
     text = (
