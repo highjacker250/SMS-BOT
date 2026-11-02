@@ -12,7 +12,6 @@ from states import S
 log = logging.getLogger("Admin")
 admin_router = Router()
 
-# FIXED: Real Online Lines logic
 async def get_online_stats(firebases):
     total_online = 0
     total_devices = 0
@@ -41,7 +40,7 @@ async def get_online_stats(firebases):
 
 def admin_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [btn("enter as user", "user:home", "👤"), btn("manage servers", "admin:manage_fb", "🔥")],
+        [btn("enter as user", "user:main_menu", "👤"), btn("manage servers", "admin:manage_fb", "🔥")],
         [btn("track device", "admin:track_device", "🔍"), btn("manage vips", "admin:vip", "⭐")],
         [btn("active timers", "admin:active_timers", "📅")],
         [btn("refresh panel", "admin:home", "🔄")]
@@ -53,13 +52,17 @@ async def admin_home_msg(msg: Message):
     countries = get_countries(d)
     users_count = len(d.get("users", {}))
     
-    # Calling fixed online stats
+    # 🚨 FIX: Calculate real servers (groups of 25) and total bases
+    total_servers = sum(len(get_servers_grouped(d, c)) for c in countries)
+    total_bases = len(fbs)
+    
     online_cnt, total_lines = await get_online_stats(fbs)
     
     text = (
         f"👑 <b>{sc('admin dashboard')}</b>\n\n"
         f"🌍 {sc('countries')}: <b>{len(countries)}</b>\n"
-        f"🔥 {sc('total servers')}: <b>{len(fbs)}</b>\n"
+        f"🔥 {sc('total servers')}: <b>{total_servers}</b>\n"
+        f"🗂 {sc('total bases')}: <b>{total_bases}</b>\n"
         f"📱 {sc('online lines')}: <b>{online_cnt}</b> / {total_lines}\n"
         f"👥 {sc('total users')}: <b>{users_count}</b>\n\n"
         f"<i>{sc('select an option below to manage the bot')}</i>"
@@ -91,7 +94,6 @@ async def admin_active_timers(cq: CallbackQuery):
             if time.time() < t["target_time"]:
                 text += f"👤 User: <code>{t['user_id']}</code>\n🆔 <code>{t['rent_id']}</code>\n📞 <code>{t['number']}</code>\n⏰ {get_ist_time_str(t['target_time'])}\n\n"
     
-    # FIX: Added proper closing brackets here
     await cq.message.edit_text(
         text, 
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), 
