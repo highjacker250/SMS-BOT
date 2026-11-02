@@ -21,8 +21,8 @@ def main_kb(uid):
         [btn("otp history", "user:history", "📜"), btn("help/support", "user:support", "🆘")]
     ]
     if is_vip:
-        # VIP ke liye alag button
-        kb.append([btn("vvip numbers", "user:vvip", "🌟")])
+        kb.append([btn("upcoming ws otps", "user:upcoming", "📅")])
+        kb.append([btn("vvip numbers", "vvip:home", "🌟")]) # VIPs ke liye alag VVIP section
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 @user_router.message(CommandStart())
@@ -41,6 +41,19 @@ async def cmd_start(msg: Message):
 
     await msg.answer(f"👋 <b>{sc('welcome to dark otp bot')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(uid), parse_mode="HTML")
 
+# 🚨 FIX: Admin panel se "Enter as User" click karne par ye handler trigger hoga
+@user_router.callback_query(F.data == "user:main_menu")
+async def user_main_menu_handler(cq: CallbackQuery):
+    await cq.answer()
+    clear_user_lease(cq.from_user.id)
+    try:
+        await cq.message.edit_text(
+            f"👋 <b>{sc('main menu')}</b>\n\nWelcome {cq.from_user.first_name}!", 
+            reply_markup=main_kb(cq.from_user.id), 
+            parse_mode="HTML"
+        )
+    except: pass
+
 # --- UPCOMING OTPs CLICKABLE LOGIC ---
 @user_router.callback_query(F.data == "user:upcoming")
 async def user_upcoming(cq: CallbackQuery):
@@ -50,14 +63,14 @@ async def user_upcoming(cq: CallbackQuery):
     user_timers = {k: v for k, v in timers.items() if v.get("user_id") == cq.from_user.id}
     
     if not user_timers:
-        return await cq.message.edit_text("📅 <b>Upcoming OTPs</b>\n\nKoi timer set nahi hai.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+        return await cq.message.edit_text("📅 <b>Upcoming OTPs</b>\n\nKoi timer set nahi hai.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]), parse_mode="HTML")
         
     kb = []
     for k, t in user_timers.items():
-        # Har timer ke liye alag clickable button
+        # Clickable button for each timer
         kb.append([btn(f"+91{t['number']} | {get_ist_time_str(t['target_time'])}", f"user:click_timer:{k}", "⏰")])
     
-    kb.append([btn("main menu", "user:home", "🏠")])
+    kb.append([btn("main menu", "user:main_menu", "🏠")])
     await cq.message.edit_text("📅 <b>Upcoming OTPs</b>\n\nNumber pe click karein details dekhne ke liye:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @user_router.callback_query(F.data.startswith("user:click_timer:"))
@@ -82,14 +95,13 @@ async def user_click_timer(cq: CallbackQuery):
         f"<i>{sc('waiting for otp...')}</i>"
     )
     
-    # Copy button for number
     kb = [
         [InlineKeyboardButton(text=f"Copy +91{num}", copy_text=CopyTextButton(text=f"+91{num}"))],
         [btn("back", "user:upcoming", "🔙")]
     ]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
-# --- GET NUMBER / FETCH LOGIC ---
+# --- GET NUMBER (NORMAL & VIP) ---
 @user_router.callback_query(F.data == "user:get_num")
 async def user_get_num(cq: CallbackQuery):
     await cq.answer()
@@ -97,8 +109,9 @@ async def user_get_num(cq: CallbackQuery):
     d = db.load_data()
     countries = get_countries(d)
     if not countries: return await cq.message.edit_text("❌ No servers available.", parse_mode="HTML")
+    
     kb = [[btn(c, f"user:country:{c}", "🌍")] for c in countries]
-    kb.append([btn("main menu", "user:home", "🏠")])
+    kb.append([btn("main menu", "user:main_menu", "🏠")])
     await cq.message.edit_text(f"🌍 <b>{sc('select country')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @user_router.callback_query(F.data.startswith("user:country:"))
@@ -112,6 +125,7 @@ async def user_country(cq: CallbackQuery):
     is_vip = cq.from_user.id in d.get("vip_users", []) or is_owner(cq.from_user.id)
     
     if is_vip:
+        # VIP Flow: Service -> Server
         kb = [
             [btn("whatsapp", f"user:service:{country}:whatsapp", "💬")],
             [btn("telegram", f"user:service:{country}:telegram", "✈️")],
@@ -120,6 +134,7 @@ async def user_country(cq: CallbackQuery):
         ]
         await cq.message.edit_text(f"🌍 {country} - <b>{sc('select service')}:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
     else:
+        # Normal User Flow: Direct Servers
         kb = []
         for i, srv in enumerate(servers):
             ping = await fbu.check_ping(srv[0]["url"], srv[0].get("auth"))
@@ -147,7 +162,7 @@ async def user_service(cq: CallbackQuery):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         return fb, clients
         
-    tasks = [fetch_clients_data(fb) for fb in servers[0]]
+    tasks = [fetch_clients_data(fb) for fb in servers[0]] # Only first server of group
     results = await asyncio.gather(*tasks)
     
     p1, p2, p3 = [], [], []
@@ -174,64 +189,9 @@ async def user_service(cq: CallbackQuery):
     elif p3: fb_i, fb, dev_id, dev_data, chance = random.choice(p3)
     else: return await cq.message.edit_text("❌ No lines found for this service.", parse_mode="HTML")
     
-    used[dev_id] = now
-    data = db.load_data()
-    data["used_devices"][str(uid)] = used
-    msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=100", fb.get("auth"))
-    msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
-    last_id = int(msgs[-1].get("id", 0)) if msgs else 0
-    
-    best_nums = fbu.extract_best_numbers(dev_data, msgs)
-    is_backup = False
-    if not best_nums:
-        backups = data.get("device_backups", {}).get(dev_id, {}).get("numbers", [])
-        if backups:
-            best_nums = [(n, "Backup") for n in backups]
-            is_backup = True
+    await _show_device_details(cq, uid, fb_i, fb, dev_id, dev_data, chance, country, f"user:service:{country}:{service}")
 
-    real_health = fbu.calculate_health(msgs)
-    base_label = fb.get("label", f"Base {fb_i+1}")
-    top_num = best_nums[0][0] if best_nums else "Unknown"
-    
-    data["user_leases"][str(uid)] = {
-        "dev_id": dev_id, "fb_url": fb["url"], "base_idx": base_label, "numbers": [n for n, c in best_nums],
-        "expire_at": int(time.time()) + 3600, "health": real_health, "last_msg_id": last_id, "top_number": top_num
-    }
-    db.save_data(data)
-    
-    is_vip = uid in data.get("vip_users", []) or is_owner(uid)
-    display_health = real_health if is_vip else 10
-    
-    nums_text = ""
-    kb_nums = []
-    if best_nums:
-        for n, c in best_nums:
-            conf_text = "Backup" if c == "Backup" else f"{c}%"
-            nums_text += f"📞 <code>+91{n}</code> | {conf_text}\n"
-            kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", copy_text=CopyTextButton(text=f"+91{n}"))])
-    else:
-        nums_text = f"⚠️ <b>{sc('extracting number...')}</b>"
-        
-    battery = str(dev_data.get("battery", "100")).replace("%", "")
-    if not battery or battery == "?": battery = "100"
-    
-    # 🚨 FIXED: Rent ID is not truncated here anymore
-    text = (
-        f"📱 <b>{sc('details')}</b>\n"
-        f"🔥 {sc('srv')}: {fb_i+1} | {base_label}\n"
-        f"🆔 <code>{dev_id}</code> | ⚙️ {battery}T | ❤️ {display_health}/10\n"
-        f"📊 {sc('chance')}: <b>{chance}%</b>\n\n"
-        f"{nums_text}"
-    )
-    kb = kb_nums + [
-        [btn("info", f"user:info:{dev_id}", "ℹ️"), btn("save number", f"user:save:{dev_id}", "⭐")],
-        [btn("set timer", f"user:set_timer:{dev_id}", "⏰")], 
-        [btn("next number", f"user:service:{country}:{service}", "🔄"), btn("stop", "user:stop", "⏹")],
-        [btn("back", f"user:country:{country}", "🔙")]
-    ]
-    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-
-# ... (Normal user server flow, same fix)
+# --- NORMAL USER SERVER CLICK ---
 @user_router.callback_query(F.data.startswith("user:server:"))
 async def user_server(cq: CallbackQuery):
     await cq.answer()
@@ -242,11 +202,13 @@ async def user_server(cq: CallbackQuery):
     d = db.load_data()
     servers = get_servers_grouped(d, country)
     if idx >= len(servers): return await cq.message.edit_text("Server not found!")
+    
     try: await cq.message.edit_text(f"🔄 {sc('fetching fresh number')}...", parse_mode="HTML")
     except: pass
     
     used = d.setdefault("used_devices", {}).setdefault(str(uid), {})
     now = int(time.time())
+    
     async def fetch_clients_data(fb):
         clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
         return fb, clients
@@ -266,40 +228,42 @@ async def user_server(cq: CallbackQuery):
                 if now - last_used > 86400: available.append((fb_i, fb, dev_id, c))
                 elif now - last_used > 43200: repeat.append((fb_i, fb, dev_id, c))
                 
-    is_rep = False
     if available: fb_i, fb, dev_id, dev_data = random.choice(available)
-    elif repeat: fb_i, fb, dev_id, dev_data = random.choice(repeat); is_rep = True
-    elif all_devs: fb_i, fb, dev_id, dev_data = random.choice(all_devs); is_rep = True
+    elif repeat: fb_i, fb, dev_id, dev_data = random.choice(repeat)
+    elif all_devs: fb_i, fb, dev_id, dev_data = random.choice(all_devs)
     else: return await cq.message.edit_text("❌ No online lines in this server.", parse_mode="HTML")
-        
-    used[dev_id] = now
-    data = db.load_data()
-    data["used_devices"][str(uid)] = used
+    
+    chance = 97 # Default chance for normal user
+    await _show_device_details(cq, uid, fb_i, fb, dev_id, dev_data, chance, country, f"user:server:{country}:{idx}")
+
+# --- HELPER FUNCTION: SHOW DEVICE DETAILS ---
+async def _show_device_details(cq, uid, fb_i, fb, dev_id, dev_data, chance, country, next_callback):
+    d = db.load_data()
+    used = d.setdefault("used_devices", {}).setdefault(str(uid), {})
+    used[dev_id] = int(time.time())
+    
     msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=100", fb.get("auth"))
     msgs = [v for k, v in msgs_dict.items() if isinstance(v, dict) and v.get("type") == "incoming"] if msgs_dict else []
     last_id = int(msgs[-1].get("id", 0)) if msgs else 0
     
     best_nums = fbu.extract_best_numbers(dev_data, msgs)
-    is_backup = False
     if not best_nums:
-        backups = data.get("device_backups", {}).get(dev_id, {}).get("numbers", [])
+        backups = d.get("device_backups", {}).get(dev_id, {}).get("numbers", [])
         if backups:
             best_nums = [(n, "Backup") for n in backups]
-            is_backup = True
 
     real_health = fbu.calculate_health(msgs)
     base_label = fb.get("label", f"Base {fb_i+1}")
     top_num = best_nums[0][0] if best_nums else "Unknown"
     
-    data["user_leases"][str(uid)] = {
+    d["user_leases"][str(uid)] = {
         "dev_id": dev_id, "fb_url": fb["url"], "base_idx": base_label, "numbers": [n for n, c in best_nums],
         "expire_at": int(time.time()) + 3600, "health": real_health, "last_msg_id": last_id, "top_number": top_num
     }
-    db.save_data(data)
+    db.save_data(d)
     
-    is_vip = uid in data.get("vip_users", []) or is_owner(uid)
+    is_vip = uid in d.get("vip_users", []) or is_owner(uid)
     display_health = real_health if is_vip else 10
-    rep_mark = " #" if is_rep else ""
     
     nums_text = ""
     kb_nums = []
@@ -314,20 +278,23 @@ async def user_server(cq: CallbackQuery):
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
     
-    # 🚨 FIXED: Rent ID not truncated
+    # 🚨 FIX: Rent ID not truncated
     text = (
         f"📱 <b>{sc('details')}</b>\n"
-        f"🔥 {sc('srv')}: {idx+1} | {base_label}\n"
-        f"🆔 <code>{dev_id}</code>{rep_mark} | ⚙️ {battery}T | ❤️ {display_health}/10\n\n"
+        f"🔥 {sc('srv')}: {fb_i+1} | {base_label}\n"
+        f"🆔 <code>{dev_id}</code> | ⚙️ {battery}T | ❤️ {display_health}/10\n"
+        f"📊 {sc('chance')}: <b>{chance}%</b>\n\n"
         f"{nums_text}"
     )
     kb = kb_nums + [
         [btn("info", f"user:info:{dev_id}", "ℹ️"), btn("save number", f"user:save:{dev_id}", "⭐")],
         [btn("set timer", f"user:set_timer:{dev_id}", "⏰")], 
-        [btn("next number", f"user:server:{country}:{idx}", "🔄"), btn("stop", "user:stop", "⏹")],
+        [btn("next number", next_callback, "🔄"), btn("stop", "user:stop", "⏹")],
         [btn("back", f"user:country:{country}", "🔙")]
     ]
-    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    try:
+        await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+    except: pass
 
 
 @user_router.callback_query(F.data.startswith("user:info:"))
@@ -365,12 +332,12 @@ async def user_saved_list(cq: CallbackQuery):
     uid = cq.from_user.id
     d = db.load_data()
     saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
-    if not saved: return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+    if not saved: return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]), parse_mode="HTML")
     kb = []
     for key, info in saved.items():
         disp = f"+91{key}" if len(key) == 10 else key
         kb.append([btn(f"{disp} | {info.get('base_idx', '')}", f"user:access:{key}", "📞")])
-    kb.append([btn("main menu", "user:home", "🏠")])
+    kb.append([btn("main menu", "user:main_menu", "🏠")])
     await cq.message.edit_text("⭐ <b>My Numbers</b>\nTap to re-access:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @user_router.callback_query(F.data.startswith("user:access:"))
@@ -394,14 +361,14 @@ async def user_access(cq: CallbackQuery):
     }
     db.save_data(d)
     text = f"📱 <b>{sc('re-accessed')}</b>\n🆔 <code>{info['dev_id']}</code>\n📞 <code>+91{key}</code>"
-    kb = [[btn("stop", "user:stop", "⏹")], [btn("main menu", "user:home", "🏠")]]
+    kb = [[btn("stop", "user:stop", "⏹")], [btn("main menu", "user:main_menu", "🏠")]]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
 @user_router.callback_query(F.data == "user:stop")
 async def user_stop(cq: CallbackQuery):
     clear_user_lease(cq.from_user.id)
     await cq.answer("⏹ Stopped.", show_alert=True)
-    await user_home(cq)
+    await user_main_menu_handler(cq)
 
 @user_router.callback_query(F.data == "user:history")
 async def user_history(cq: CallbackQuery):
@@ -415,7 +382,7 @@ async def user_history(cq: CallbackQuery):
             time_str = fbu.get_ist_time_str(h['time'])
             num = h.get('number', 'Unknown')
             text += f"📅 {time_str}\n📱 {h['service']}\n📞 <code>+91{num}</code>\n🔑 <code>{h['otp']}</code>\n───────────\n"
-    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:home", "🏠")]]), parse_mode="HTML")
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]), parse_mode="HTML")
 
 
 @user_router.callback_query(F.data.startswith("user:set_timer:"))
@@ -434,7 +401,7 @@ async def user_set_timer_start(cq: CallbackQuery, state: FSMContext):
         f"🆔 Rent ID: <code>{dev_id}</code>\n\n"
         f"Kitne time baad OTP aayega?\n"
         f"Format: <code>59m</code>, <code>16h</code>, <code>1d</code>",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:home", "❌")]]),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:main_menu", "❌")]]),
         parse_mode="HTML"
     )
 
