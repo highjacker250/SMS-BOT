@@ -137,25 +137,20 @@ async def user_service(cq: CallbackQuery):
                 parse_mode="HTML"
             )
             
-        # 🚨 SMART RANDOMIZATION: User ke used_devices check karo
         used = d.setdefault("used_devices", {}).setdefault(str(uid), {})
         now = int(time.time())
         
-        # Sirf wo numbers lo jo 24 ghante me use nahi hue
         available_lines = []
         for dev_id, data in ready.items():
             last_used = used.get(dev_id, 0)
-            if now - last_used > 86400: # 24 hours
+            if now - last_used > 86400: 
                 available_lines.append((dev_id, data))
         
-        # Agar saare use ho gaye hain, to purane wale dedo (par error mat do)
         if not available_lines:
             available_lines = list(ready.items())
         
-        # Randomly pick karo
         dev_id, dev_data = random.choice(available_lines)
         
-        # Mark as used
         used[dev_id] = now
         data = db.load_data()
         data["used_devices"][str(uid)] = used
@@ -367,4 +362,29 @@ async def user_save(cq: CallbackQuery):
     dev_id = cq.data.split(":")[2]
     uid = cq.from_user.id
     d = db.load_data()
-    lease = d.get
+    lease = d.get("user_leases", {}).get(str(uid), {})
+    if not lease or lease.get("dev_id") != dev_id: return await cq.answer("❌ Lease expired!", show_alert=True)
+    nums = lease.get("numbers", [])
+    save_key = nums[0] if nums else dev_id
+    user = d["users"].setdefault(str(uid), {})
+    user.setdefault("saved_numbers", {})[save_key] = {
+        "dev_id": dev_id, "fb_url": lease["fb_url"], "base_idx": lease.get("base_idx"), "time": int(time.time())
+    }
+    db.save_data(d)
+    await cq.answer("⭐ Saved!", show_alert=True)
+
+@user_router.callback_query(F.data == "user:saved")
+async def user_saved_list(cq: CallbackQuery):
+    await cq.answer()
+    uid = cq.from_user.id
+    d = db.load_data()
+    saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
+    if not saved: return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]), parse_mode="HTML")
+    kb = []
+    for key, info in saved.items():
+        disp = f"+91{key}" if len(key) == 10 else key
+        kb.append([btn(f"{disp} | {info.get('base_idx', '')}", f"user:access:{key}", "📞")])
+    kb.append([btn("main menu", "user:main_menu", "🏠")])
+    await cq.message.edit_text("⭐ <b>My Numbers</b>\nTap to re-access:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_
