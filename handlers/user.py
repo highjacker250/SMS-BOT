@@ -41,7 +41,7 @@ async def cmd_start(msg: Message):
 
     await msg.answer(f"👋 <b>{sc('welcome to dark otp bot')}</b>\n{sc('select an option below')}:", reply_markup=main_kb(uid), parse_mode="HTML")
 
-# 🚨 FIX: Admin panel se "Enter as User" click karne par ye handler trigger hoga
+# FIX: Admin panel se "Enter as User" click karne par ye handler trigger hoga
 @user_router.callback_query(F.data == "user:main_menu")
 async def user_main_menu_handler(cq: CallbackQuery):
     await cq.answer()
@@ -53,6 +53,42 @@ async def user_main_menu_handler(cq: CallbackQuery):
             parse_mode="HTML"
         )
     except: pass
+
+# --- VVIP NUMBERS FLOW ---
+@user_router.callback_query(F.data == "vvip:home")
+async def vvip_home(cq: CallbackQuery):
+    await cq.answer()
+    d = db.load_data()
+    countries = get_countries(d)
+    kb = [[btn(c, f"vvip:country:{c}", "🌍")] for c in countries]
+    kb.append([btn("main menu", "user:main_menu", "🏠")])
+    await cq.message.edit_text("🌟 <b>VVIP NUMBERS</b>\n\nSelect Country:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_router.callback_query(F.data.startswith("vvip:country:"))
+async def vvip_country(cq: CallbackQuery):
+    await cq.answer()
+    country = cq.data.split(":")[2]
+    kb = [
+        [btn("whatsapp", f"vvip:service:{country}:whatsapp", "💬")],
+        [btn("telegram", f"vvip:service:{country}:telegram", "✈️")],
+        [btn("any service", f"vvip:service:{country}:any", "🌐")],
+        [btn("back", "vvip:home", "🔙")]
+    ]
+    await cq.message.edit_text(f"🌟 {country} - <b>Select Service:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_router.callback_query(F.data.startswith("vvip:service:"))
+async def vvip_service(cq: CallbackQuery):
+    await cq.answer()
+    parts = cq.data.split(":")
+    country, service = parts[2], parts[3]
+    
+    # Yahan hum wahi user_service logic call kar rahe hain taaki VVIP ke liye bhi scanning chale
+    await cq.message.edit_text(f"🔄 Fetching VVIP {service} lines...", parse_mode="HTML")
+    
+    # Fake callback data generate kar rahe hain taaki user_service ka logic trigger ho
+    cq.data = f"user:service:{country}:{service}"
+    await user_service(cq)
+
 
 # --- UPCOMING OTPs CLICKABLE LOGIC ---
 @user_router.callback_query(F.data == "user:upcoming")
@@ -278,7 +314,7 @@ async def _show_device_details(cq, uid, fb_i, fb, dev_id, dev_data, chance, coun
     battery = str(dev_data.get("battery", "100")).replace("%", "")
     if not battery or battery == "?": battery = "100"
     
-    # 🚨 FIX: Rent ID not truncated
+    # FIX: Full Rent ID shown here
     text = (
         f"📱 <b>{sc('details')}</b>\n"
         f"🔥 {sc('srv')}: {fb_i+1} | {base_label}\n"
