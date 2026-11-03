@@ -116,7 +116,7 @@ async def user_country(cq: CallbackQuery):
 
 @user_router.callback_query(F.data.startswith("user:service:"))
 async def user_service(cq: CallbackQuery):
-    await cq.answer() # Instant ack
+    await cq.answer()
     parts = cq.data.split(":")
     country, service = parts[2], parts[3]
     uid = cq.from_user.id
@@ -144,7 +144,6 @@ async def user_service(cq: CallbackQuery):
         random.shuffle(available_lines)
 
         valid_dev = None
-        # Parallel check for online status (First 3 devices)
         for dev_id, dev_data in available_lines[:3]:
             fb_url = dev_data["fb_url"]
             auth = dev_data.get("auth", "")
@@ -461,7 +460,6 @@ async def user_upcoming(cq: CallbackQuery):
     if not user_timers:
         return await cq.message.edit_text("📅 <b>Upcoming OTPs</b>\n\nKoi timer set nahi hai.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]), parse_mode="HTML")
 
-    # 🚨 FIX: Ab timers target_time ke hisaab se sorted hain — jo jaldi aayega wo sabse upar.
     sorted_timers = sorted(user_timers.items(), key=lambda kv: kv[1]["target_time"])
 
     kb = []
@@ -481,7 +479,6 @@ async def user_click_timer(cq: CallbackQuery):
     if not timer:
         return await cq.answer("❌ Timer expired or not found.", show_alert=True)
 
-    # Security: sirf apna hi timer dekh/edit kar sake
     if timer.get("user_id") != cq.from_user.id:
         return await cq.answer("❌ Ye aapka timer nahi hai!", show_alert=True)
 
@@ -504,7 +501,6 @@ async def user_click_timer(cq: CallbackQuery):
     ]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
-# 🚨 NEW: Timer remove karne ka option
 @user_router.callback_query(F.data.startswith("user:remove_timer:"))
 async def user_remove_timer(cq: CallbackQuery):
     timer_id = cq.data.split(":")[2]
@@ -515,7 +511,6 @@ async def user_remove_timer(cq: CallbackQuery):
         await cq.answer("❌ Timer pehle se hi hata diya gaya hai.", show_alert=True)
         return await user_upcoming(cq)
 
-    # Security: sirf apna hi timer delete kar sake
     if timer.get("user_id") != cq.from_user.id:
         return await cq.answer("❌ Ye aapka timer nahi hai!", show_alert=True)
 
@@ -591,3 +586,7 @@ async def user_set_timer_done(msg: Message, state: FSMContext):
         reply_markup=main_kb(msg.from_user.id),
         parse_mode="HTML"
     )
+
+# 🚨 FIX: Support handler add kiya
+@user_router.callback_query(F.data == "user:support")
+async def user_support
