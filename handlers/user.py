@@ -587,6 +587,12 @@ async def user_set_timer_done(msg: Message, state: FSMContext):
         parse_mode="HTML"
     )
 
-# 🚨 FIX: Support handler add kiya
 @user_router.callback_query(F.data == "user:support")
-async def user_support
+async def user_support(cq: CallbackQuery):
+    await cq.answer()
+    await cq.message.edit_text(
+        f"🆘 <b>{sc('help & support')}</b>\n\n"
+        f"Contact Owner: <a href='tg://user?id={config.MAIN_OWNER}'>Click Here</a>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]),
+        parse_mode="HTML"
+    )
