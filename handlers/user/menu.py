@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart
 import time, logging
 import database as db
 from utils.ui import sc, btn
-from utils.helper import clear_user_lease, is_owner
+from utils.helper import clear_user_lease, is_owner, get_countries
 import config
 
 log = logging.getLogger("UserMenu")
@@ -58,3 +58,25 @@ async def user_support(cq: CallbackQuery):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]),
         parse_mode="HTML"
     )
+
+# 🚨 VVIP FLOW (Yahan add kiya hai)
+@user_router.callback_query(F.data == "vvip:home")
+async def vvip_home(cq: CallbackQuery):
+    await cq.answer()
+    d = db.load_data()
+    countries = get_countries(d)
+    kb = [[btn(c, f"vvip:country:{c}", "🌍")] for c in countries]
+    kb.append([btn("main menu", "user:main_menu", "🏠")])
+    await cq.message.edit_text("🌟 <b>VVIP NUMBERS</b>\n\nSelect Country:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_router.callback_query(F.data.startswith("vvip:country:"))
+async def vvip_country(cq: CallbackQuery):
+    await cq.answer()
+    country = cq.data.split(":")[2]
+    kb = [
+        [btn("whatsapp", f"user:service:{country}:whatsapp", "💬")],
+        [btn("telegram", f"user:service:{country}:telegram", "✈️")],
+        [btn("any service", f"user:service:{country}:any", "🌐")],
+        [btn("back", "vvip:home", "🔙")]
+    ]
+    await cq.message.edit_text(f"🌟 {country} - <b>Select Service:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")w
