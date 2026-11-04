@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI TG Panel</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #17212b; color: #fff; }
+        .sidebar { width: 300px; height: 100vh; background: #0e1621; float: left; border-right: 1px solid #242f3d; }
+        .account { padding: 15px; border-bottom: 1px solid #242f3d; cursor: pointer; }
+        .account:hover { background: #202b36; }
+        .status-active { color: #4caf50; }
+        .status-wait { color: #ff9800; }
+        .status-failed { color: #f44336; }
+        .main { margin-left: 300px; height: 100vh; display: flex; align-items: center; justify-content: center; color: #6c7883;}
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div style="padding: 20px; font-weight: bold; border-bottom: 1px solid #242f3d;">TG Accounts (Owner)</div>
+        {% for phone, acc in accounts.items() %}
+        <div class="account" onclick="alert('Chat view for {{ phone }} coming soon!')">
+            <div style="font-weight: 500;">+{{ phone }}</div>
+            <div style="font-size: 12px; margin-top: 5px;" class="status-{{ acc.status }}">
+                ● {{ acc.status | replace('_', ' ') | upper }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="main">
+        <h1>Select an account to view messages</h1>
+    </div>
+</body>
+</html>
