@@ -2,7 +2,7 @@ from aiogram.types import InlineKeyboardButton
 
 SMALL_CAPS_MAP = str.maketrans(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "ᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢ"
+    "біА ЩбіДбіЕбіЗ“У…Ґ Ь…™біКбіЛ ЯбіН…ібіПбіШ«Ђ АsбіЫбіЬбі†бі°x ПбіҐбіА ЩбіДбіЕбіЗ“У…Ґ Ь…™біКбіЛ ЯбіН…ібіПбіШ«Ђ АsбіЫбіЬбі†бі°x ПбіҐ"
 )
 
 def sc(text: str) -> str: 
