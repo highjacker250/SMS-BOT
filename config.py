@@ -15,3 +15,6 @@ MASTER_EMAIL = os.getenv("MASTER_EMAIL", "iamnotready171@gmail.com")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD", "uhuqjurpxqkvayet")
 
 WEB_URL = os.getenv("WEB_URL", "http://localhost:8081")
+
+# 🚨 WARP Proxy address (Cloudflare WARP CLI default port)
+WARP_PROXY = "socks5://127.0.0.1:40000"
