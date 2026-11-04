@@ -3,30 +3,56 @@
 <head>
     <title>AI TG Panel</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #17212b; color: #fff; }
-        .sidebar { width: 300px; height: 100vh; background: #0e1621; float: left; border-right: 1px solid #242f3d; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #17212b; color: #fff; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 300px; background: #0e1621; border-right: 1px solid #242f3d; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; font-weight: bold; border-bottom: 1px solid #242f3d; background: #17212b; }
+        .account-list { flex: 1; overflow-y: auto; }
         .account { padding: 15px; border-bottom: 1px solid #242f3d; cursor: pointer; }
         .account:hover { background: #202b36; }
         .status-active { color: #4caf50; }
-        .status-wait { color: #ff9800; }
+        .status-waiting_7_days { color: #ff9800; }
         .status-failed { color: #f44336; }
-        .main { margin-left: 300px; height: 100vh; display: flex; align-items: center; justify-content: center; color: #6c7883;}
+        .status-logging_in { color: #2196f3; }
+        .main { flex: 1; display: flex; flex-direction: column; }
+        .top-bar { padding: 15px; background: #17212b; border-bottom: 1px solid #242f3d; display: flex; justify-content: space-between; }
+        .content { flex: 1; display: flex; align-items: center; justify-content: center; color: #6c7883; flex-direction: column; }
+        .proxy-box { padding: 15px; background: #0e1621; border-top: 1px solid #242f3d; font-size: 12px; color: #6c7883; max-height: 200px; overflow-y: auto; }
+        .proxy-item { padding: 5px 0; border-bottom: 1px solid #242f3d; }
+        .live-status { font-family: monospace; background: #000; padding: 10px; border-radius: 5px; color: #0f0; margin-top: 10px; width: 80%; text-align: left; }
     </style>
 </head>
 <body>
     <div class="sidebar">
-        <div style="padding: 20px; font-weight: bold; border-bottom: 1px solid #242f3d;">TG Accounts (Owner)</div>
-        {% for phone, acc in accounts.items() %}
-        <div class="account" onclick="alert('Chat view for {{ phone }} coming soon!')">
-            <div style="font-weight: 500;">+{{ phone }}</div>
-            <div style="font-size: 12px; margin-top: 5px;" class="status-{{ acc.status }}">
-                ● {{ acc.status | replace('_', ' ') | upper }}
+        <div class="sidebar-header">TG Accounts</div>
+        <div class="account-list">
+            {% for phone, acc in accounts.items() %}
+            <div class="account" onclick="alert('Chat view for {{ phone }} coming soon!')">
+                <div style="font-weight: 500; font-size: 16px;">+{{ phone }}</div>
+                <div style="font-size: 12px; margin-top: 5px;" class="status-{{ acc.status }}">
+                    ● {{ acc.status | replace('_', ' ') | upper }}
+                </div>
             </div>
+            {% endfor %}
         </div>
-        {% endfor %}
+        <div class="proxy-box">
+            <b>Working Proxies ({{ proxies | length }}):</b><br>
+            {% for p in proxies %}
+            <div class="proxy-item">{{ p }}</div>
+            {% endfor %}
+        </div>
     </div>
     <div class="main">
-        <h1>Select an account to view messages</h1>
+        <div class="top-bar">
+            <div><b>AI Live Status:</b> {{ bot_status.task }}</div>
+            <div><b>Detail:</b> {{ bot_status.detail }}</div>
+        </div>
+        <div class="content">
+            <h1>Select an account to view messages</h1>
+            <div class="live-status">
+                > {{ bot_status.task }}...<br>
+                > {{ bot_status.detail }}<br>
+            </div>
+        </div>
     </div>
 </body>
 </html>
