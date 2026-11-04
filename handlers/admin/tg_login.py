@@ -15,7 +15,6 @@ admin_router = Router()
 @admin_router.message(Command("tglogin"))
 async def cmd_tg_login(msg: Message, state: FSMContext):
     if not is_owner(msg.from_user.id): return
-    
     await state.set_state(S.tg_login_phone)
     await msg.answer(
         "📱 <b>Enter phone number with country code</b>\n"
@@ -35,17 +34,13 @@ async def process_tg_login(msg: Message, state: FSMContext):
     
     status_msg = await msg.answer(f"🔄 <b>Starting AI Auto-Login for {phone}...</b>\nPlease wait, fetching Email OTP.", parse_mode="HTML")
     
-    # Save initial state to DB
     d = db.load_data()
     d["telegram_accounts"][phone] = {"status": "logging_in", "reset_time": 0, "session": ""}
     db.save_data(d)
     
-    # Trigger Login
     res = await auto_login_tg(phone)
     
-    # Reload DB to ensure we don't overwrite other changes
     d = db.load_data()
-    
     if res["status"] == "success":
         d["telegram_accounts"][phone] = {"status": "active", "session": res["session"], "reset_time": 0}
         db.save_data(d)
@@ -58,8 +53,7 @@ async def process_tg_login(msg: Message, state: FSMContext):
         )
     else:
         if "2FA" in res["reason"]:
-            # Account has 2FA, AI will wait 7 days for SMS reset
-            reset_time = int(time.time()) + (7 * 24 * 3600) # 7 days from now
+            reset_time = int(time.time()) + (7 * 24 * 3600)
             d["telegram_accounts"][phone] = {"status": "waiting_7_days", "session": "", "reset_time": reset_time}
             db.save_data(d)
             await status_msg.edit_text(
