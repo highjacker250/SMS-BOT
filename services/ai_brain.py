@@ -77,7 +77,6 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                 temperature=0.1
             )
             final_answer = second_response.choices[0].message.content
-            log.info(f"AI Decision: {final_answer}")
             try:
                 clean_json = final_answer.replace("```json", "").replace("```", "").strip()
                 decision = json.loads(clean_json)
@@ -88,3 +87,17 @@ async def get_best_number_with_ai(service_type="whatsapp"):
     except Exception as e:
         log.error(f"AI Brain Error: {e}")
         return None, f"AI Error: {str(e)}"
+
+async def chat_with_ai_owner(user_msg):
+    if not client: return "AI Key missing."
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are a helpful coding and system architecture assistant for the Owner of a Telegram OTP Bot. Keep answers short, technical, and in Hinglish. Suggest improvements for bot features."},
+                {"role": "user", "content": user_msg}
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"AI Error: {e}"
