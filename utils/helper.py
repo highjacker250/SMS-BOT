@@ -26,4 +26,4 @@ def get_servers_grouped(data, country: str):
 
 def get_ist_time_str(ts):
     ist = datetime.utcfromtimestamp(ts) + timedelta(hours=5, minutes=30)
-    return ist.strftime("%d %b %Y | %I:%M %p")
+    return ist.strftime("%d %b %Y | %I:%M %p")q
