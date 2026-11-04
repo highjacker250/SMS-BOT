@@ -67,22 +67,24 @@ async def process_tg_login(msg: Message, state: FSMContext):
             db.save_data(d)
             await status_msg.edit_text(f"❌ <b>Login Failed:</b> {res['reason']}", parse_mode="HTML")
 
-@admin_router.message(Command("tglist"))
-async def cmd_tg_list(msg: Message):
+# 🚨 NAYA: Telegram Login Stats command
+@admin_router.message(Command("tgstats"))
+async def cmd_tg_stats(msg: Message):
     if not is_owner(msg.from_user.id): return
     d = db.load_data()
     accs = d.get("telegram_accounts", {})
     
-    if not accs: 
-        return await msg.answer("No TG accounts added yet. Use /tglogin <number>")
+    total = len(accs)
+    active = sum(1 for a in accs.values() if a.get("status") == "active")
+    waiting = sum(1 for a in accs.values() if a.get("status") == "waiting_7_days")
+    failed = sum(1 for a in accs.values() if a.get("status") == "failed")
     
-    text = "📱 <b>Telegram Accounts Status:</b>\n\n"
-    for phone, info in accs.items():
-        status = info.get("status", "unknown").upper()
-        if status == "WAITING_7_DAYS":
-            remaining = int((info['reset_time'] - time.time()) / 3600)
-            text += f"📞 <code>{phone}</code>\n⏳ Waiting: {remaining}h left\n\n"
-        else:
-            text += f"📞 <code>{phone}</code>\n✅ Status: {status}\n\n"
-            
+    text = (
+        f"📊 <b>Telegram Login Stats</b>\n\n"
+        f"📱 Total Accounts: <b>{total}</b>\n"
+        f"✅ Active (Logged In): <b>{active}</b>\n"
+        f"⏳ Waiting (7 Days): <b>{waiting}</b>\n"
+        f"❌ Failed: <b>{failed}</b>\n\n"
+        f"<i>Use /tglist to see detailed status of each account.</i>"
+    )
     await msg.answer(text, parse_mode="HTML")
