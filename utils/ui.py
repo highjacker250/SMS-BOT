@@ -1,8 +1,9 @@
 from aiogram.types import InlineKeyboardButton
 
+# 🚨 FIXED: Length now matches (52 English letters to 52 Unicode small caps)
 SMALL_CAPS_MAP = str.maketrans(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "біА ЩбіДбіЕбіЗ“У…Ґ Ь…™біКбіЛ ЯбіН…ібіПбіШ«Ђ АsбіЫбіЬбі†бі°x ПбіҐбіА ЩбіДбіЕбіЗ“У…Ґ Ь…™біКбіЛ ЯбіН…ібіПбіШ«Ђ АsбіЫбіЬбі†бі°x ПбіҐ"
+    "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ"
 )
 
 def sc(text: str) -> str: 
