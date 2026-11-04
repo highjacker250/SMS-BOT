@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import aiohttp
+from contextlib import asynccontextmanager
 
 # 🚨 PYTHON 3.14 FIX for Pyrogram
 try:
@@ -8,100 +9,88 @@ try:
 except RuntimeError:
     asyncio.set_event_loop(asyncio.new_event_loop())
 
-from aiohttp import web, ClientSession
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.requests import Request
+import uvicorn
 import config
+
 from core.scanner import start_scanner, backup_scanner, whatsapp_scanner
 from services.telegram_automation import reset_watchdog_loop
 from services.proxy_manager import proxy_scanner_loop
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
-
-# FastAPI Import
-from web_panel.app import app as fastapi_app
-from uvicorn import Config, Server
+import database as db
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("Main")
 
-# 🚨 1. FastAPI (Panel) ko Port 8081 pe start karo
-async def run_fastapi():
-    conf = Config(app=fastapi_app, host="127.0.0.1", port=config.PORT + 1, log_level="warning")
-    server = Server(conf)
-    await server.serve()
+bot = Bot(token=config.BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
+dp.include_routers(owner_router, admin_router, user_router)
 
-# 🚨 2. Main Web Server (Port 8080) jo requests ko handle karega
-async def web_server():
-    app = web.Application()
-    
-    # Bot keep-alive route
-    app.router.add_get('/', lambda r: web.Response(text="Bot Running!"))
-    
-    # 🚨 PROXY ROUTE: Agar koi /panel pe aaye, toh use FastAPI (8081) pe bhej do
-    async def proxy_to_fastapi(request):
-        target_url = f"http://127.0.0.1:{config.PORT + 1}{request.path_qs}"
-        
-        async with ClientSession() as session:
-            # Original request ke headers copy karo
-            headers = dict(request.headers)
-            headers.pop('Host', None) # Host header hatao warna FastAPI confuse hoga
-            
-            # Body read karo (agar POST request hai toh)
-            body = await request.read() if request.method in ["POST", "PUT", "PATCH"] else None
-            
-            async with session.request(request.method, target_url, headers=headers, data=body) as resp:
-                resp_body = await resp.read()
-                # Response wapas bhej do
-                return web.Response(
-                    body=resp_body,
-                    status=resp.status,
-                    headers={k: v for k, v in resp.headers.items() if k.lower() not in ('content-encoding', 'transfer-encoding', 'content-length')},
-                    content_type=resp.content_type
-                )
-                
-    # Saare panel routes proxy kar do
-    app.router.add_route('*', '/panel', proxy_to_fastapi)
-    app.router.add_route('*', '/panel/{tail:.*}', proxy_to_fastapi)
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    await web.TCPSite(runner, '0.0.0.0', config.PORT).start()
-
-# 🚨 3. Render Free Tier ke liye Self-Ping (15 min me sleep na ho)
+# Background Tasks
 async def self_ping():
     url = f"http://localhost:{config.PORT}/"
     while True:
-        await asyncio.sleep(600) # Har 10 min me ping
+        await asyncio.sleep(600)
         try:
-            async with ClientSession() as session:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=5) as resp:
                     pass
-            log.info("Self-ping successful.")
-        except Exception as e:
-            log.warning(f"Self-ping failed: {e}")
+        except Exception:
+            pass
 
-async def main():
-    # Dono servers start karo
-    asyncio.create_task(run_fastapi())
-    await asyncio.sleep(2) # FastAPI ko start hone ka time do
-    await web_server()
-    
-    bot = Bot(token=config.BOT_TOKEN)
-    dp = Dispatcher(storage=MemoryStorage())
-    
-    dp.include_routers(owner_router, admin_router, user_router)
-    
-    # Background Tasks start karo
+# 🚨 FastAPI App setup
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start Bot Polling and Background Tasks
+    log.info("Starting Bot Polling and Scanners...")
+    asyncio.create_task(dp.start_polling(bot))
     asyncio.create_task(start_scanner(bot))
     asyncio.create_task(backup_scanner(bot))
     asyncio.create_task(whatsapp_scanner(bot))
     asyncio.create_task(reset_watchdog_loop())
     asyncio.create_task(proxy_scanner_loop())
-    asyncio.create_task(self_ping()) 
+    asyncio.create_task(self_ping())
+    yield
+    # Shutdown
+    log.info("Shutting down...")
+    await bot.session.close()
+
+app = FastAPI(lifespan=lifespan)
+templates = Jinja2Templates(directory="web_panel/templates")
+
+@app.get("/", response_class=HTMLResponse)
+async def health_check():
+    return "Bot is Running! Go to /panel for dashboard."
+
+@app.get("/panel", response_class=HTMLResponse)
+async def owner_panel(request: Request):
+    d = db.load_data()
+    accounts = d.get("telegram_accounts", {})
+    bot_status = db.get_bot_status()
+    proxies = d.get("working_proxies", [])
     
-    await dp.start_polling(bot)
+    formatted_accounts = []
+    for phone, acc in accounts.items():
+        formatted_accounts.append({
+            "phone": phone,
+            "status": acc.get("status", "unknown"),
+            "session": acc.get("session", "")[:10] + "..." if acc.get("session") else "No Session",
+            "reset_time": acc.get("reset_time", 0)
+        })
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request, 
+        "accounts": formatted_accounts,
+        "bot_status": bot_status,
+        "proxies": proxies
+    })
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    uvicorn.run(app, host="0.0.0.0", port=config.PORT)
