@@ -71,4 +71,4 @@ async def user_remove_timer(cq: CallbackQuery):
     del d["upcoming_timers"][timer_id]
     db.save_data(d)
     await cq.answer("🗑 Timer removed!", show_alert=True)
-    await user_upcoming(cq)1
+    await user_upcoming(cq)
