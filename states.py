@@ -14,4 +14,6 @@ class S(StatesGroup):
     add_country = State()
     track_query = State()
     add_vip = State()
-    set_timer = State() # 👈 Naya State
+    set_timer = State()
+    ai_chat = State()
+    save_name = State() # 🚨 NAYA STATE
