@@ -36,6 +36,7 @@ def load_data():
                 if "custom_countries" not in data: data["custom_countries"] = []
                 if "upcoming_timers" not in data: data["upcoming_timers"] = {}
                 if "whatsapp_ready_lines" not in data: data["whatsapp_ready_lines"] = {}
+                if "telegram_accounts" not in data: data["telegram_accounts"] = {} # 🚨 Naya
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
@@ -45,7 +46,7 @@ def load_data():
         "free_mode": True, "users": {}, "firebases": [], "user_leases": {}, 
         "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}, 
         "vip_users": [], "device_backups": {}, "custom_countries": [], "upcoming_timers": {},
-        "whatsapp_ready_lines": {}
+        "whatsapp_ready_lines": {}, "telegram_accounts": {}
     }
     return _DATA_CACHE
 
