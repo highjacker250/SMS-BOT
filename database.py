@@ -7,7 +7,6 @@ log = logging.getLogger("DB")
 supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_KEY) if config.SUPABASE_URL and config.SUPABASE_KEY else None
 _DATA_CACHE = None
 
-# 🚨 Bot Status tracking
 _BOT_STATUS = {
     "task": "Idle",
     "detail": "Waiting for tasks...",
