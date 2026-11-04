@@ -2,12 +2,13 @@ import asyncio
 import logging
 import aiohttp
 
+# 🚨 PYTHON 3.14 FIX for Pyrogram
 try:
     asyncio.get_event_loop()
 except RuntimeError:
     asyncio.set_event_loop(asyncio.new_event_loop())
 
-from aiohttp import web
+from aiohttp import web, ClientSession
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 import config
@@ -17,70 +18,82 @@ from services.proxy_manager import proxy_scanner_loop
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
-import database as db
+
+# FastAPI Import
+from web_panel.app import app as fastapi_app
+from uvicorn import Config, Server
 
 logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("Main")
 
-# 🚨 NAYA: Simple Panel renderer (Bina FastAPI ke, taaki 500 error na aaye)
-async def panel_handler(request):
-    d = db.load_data()
-    accounts = d.get("telegram_accounts", {})
-    bot_status = db.get_bot_status()
-    
-    html = f"""
-    <html>
-    <head>
-        <title>AI TG Panel</title>
-        <style>
-            body {{ font-family: Arial; background: #17212b; color: #fff; margin: 0; }}
-            .sidebar {{ width: 300px; height: 100vh; background: #0e1621; float: left; padding: 20px; }}
-            .main {{ margin-left: 320px; padding: 20px; }}
-            .account {{ padding: 10px; border-bottom: 1px solid #242f3d; }}
-            .status-active {{ color: #4caf50; }}
-            .status-waiting_7_days {{ color: #ff9800; }}
-            .status-failed {{ color: #f44336; }}
-        </style>
-    </head>
-    <body>
-        <div class="sidebar">
-            <h2>TG Accounts</h2>
-            {"".join([f'<div class="account"><b>+{phone}</b><br><span class="status-{acc.get("status", "unknown")}">{acc.get("status", "unknown").upper()}</span></div>' for phone, acc in accounts.items()])}
-        </div>
-        <div class="main">
-            <h1>Live Status</h1>
-            <p><b>Task:</b> {bot_status.get('task')}</p>
-            <p><b>Detail:</b> {bot_status.get('detail')}</p>
-        </div>
-    </body>
-    </html>
-    """
-    return web.Response(text=html, content_type='text/html')
+# 🚨 1. FastAPI (Panel) ko Port 8081 pe start karo
+async def run_fastapi():
+    conf = Config(app=fastapi_app, host="127.0.0.1", port=config.PORT + 1, log_level="warning")
+    server = Server(conf)
+    await server.serve()
 
-async def self_ping():
-    url = f"http://localhost:{config.PORT}/"
-    while True:
-        await asyncio.sleep(600)
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=5) as resp:
-                    pass
-        except Exception:
-            pass
-
-async def main():
+# 🚨 2. Main Web Server (Port 8080) jo requests ko handle karega
+async def web_server():
     app = web.Application()
+    
+    # Bot keep-alive route
     app.router.add_get('/', lambda r: web.Response(text="Bot Running!"))
-    app.router.add_get('/panel', panel_handler) # 🚨 Panel route
+    
+    # 🚨 PROXY ROUTE: Agar koi /panel pe aaye, toh use FastAPI (8081) pe bhej do
+    async def proxy_to_fastapi(request):
+        target_url = f"http://127.0.0.1:{config.PORT + 1}{request.path_qs}"
+        
+        async with ClientSession() as session:
+            # Original request ke headers copy karo
+            headers = dict(request.headers)
+            headers.pop('Host', None) # Host header hatao warna FastAPI confuse hoga
+            
+            # Body read karo (agar POST request hai toh)
+            body = await request.read() if request.method in ["POST", "PUT", "PATCH"] else None
+            
+            async with session.request(request.method, target_url, headers=headers, data=body) as resp:
+                resp_body = await resp.read()
+                # Response wapas bhej do
+                return web.Response(
+                    body=resp_body,
+                    status=resp.status,
+                    headers={k: v for k, v in resp.headers.items() if k.lower() not in ('content-encoding', 'transfer-encoding', 'content-length')},
+                    content_type=resp.content_type
+                )
+                
+    # Saare panel routes proxy kar do
+    app.router.add_route('*', '/panel', proxy_to_fastapi)
+    app.router.add_route('*', '/panel/{tail:.*}', proxy_to_fastapi)
     
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, '0.0.0.0', config.PORT).start()
+
+# 🚨 3. Render Free Tier ke liye Self-Ping (15 min me sleep na ho)
+async def self_ping():
+    url = f"http://localhost:{config.PORT}/"
+    while True:
+        await asyncio.sleep(600) # Har 10 min me ping
+        try:
+            async with ClientSession() as session:
+                async with session.get(url, timeout=5) as resp:
+                    pass
+            log.info("Self-ping successful.")
+        except Exception as e:
+            log.warning(f"Self-ping failed: {e}")
+
+async def main():
+    # Dono servers start karo
+    asyncio.create_task(run_fastapi())
+    await asyncio.sleep(2) # FastAPI ko start hone ka time do
+    await web_server()
     
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     
     dp.include_routers(owner_router, admin_router, user_router)
     
+    # Background Tasks start karo
     asyncio.create_task(start_scanner(bot))
     asyncio.create_task(backup_scanner(bot))
     asyncio.create_task(whatsapp_scanner(bot))
