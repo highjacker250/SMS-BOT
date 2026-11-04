@@ -17,4 +17,6 @@ class S(StatesGroup):
     set_timer = State()
     ai_chat = State()
     save_name = State()
-    tg_login_phone = State() # 🚨 Naya
+    tg_login_phone = State()
+    add_custom_proxy = State()
+    add_manual_proxy = State()
