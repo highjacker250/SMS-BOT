@@ -1,4 +1,12 @@
-import asyncio, logging
+import asyncio
+import logging
+
+# 🚨 PYTHON 3.14 FIX for Pyrogram
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -6,7 +14,7 @@ import config
 from core.scanner import start_scanner, backup_scanner, whatsapp_scanner
 from services.telegram_automation import reset_watchdog_loop, ensure_warp
 from services.proxy_manager import proxy_scanner_loop
-from services.warp_manager import start_warp # 🚨 Import WARP
+from services.warp_manager import start_warp
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
