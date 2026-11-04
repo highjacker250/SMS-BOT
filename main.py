@@ -2,7 +2,6 @@ import asyncio
 import logging
 import aiohttp
 
-# 🚨 PYTHON 3.14 FIX for Pyrogram
 try:
     asyncio.get_event_loop()
 except RuntimeError:
@@ -18,12 +17,44 @@ from services.proxy_manager import proxy_scanner_loop
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
-
-# FastAPI Import
-from web_panel.app import app as fastapi_app
-from aiohttp_wsgi import WSGIHandler # 🚨 NAYA: FastAPI ko aiohttp me chalane ke liye
+import database as db
 
 logging.basicConfig(level=logging.INFO)
+
+# 🚨 NAYA: Simple Panel renderer (Bina FastAPI ke, taaki 500 error na aaye)
+async def panel_handler(request):
+    d = db.load_data()
+    accounts = d.get("telegram_accounts", {})
+    bot_status = db.get_bot_status()
+    
+    html = f"""
+    <html>
+    <head>
+        <title>AI TG Panel</title>
+        <style>
+            body {{ font-family: Arial; background: #17212b; color: #fff; margin: 0; }}
+            .sidebar {{ width: 300px; height: 100vh; background: #0e1621; float: left; padding: 20px; }}
+            .main {{ margin-left: 320px; padding: 20px; }}
+            .account {{ padding: 10px; border-bottom: 1px solid #242f3d; }}
+            .status-active {{ color: #4caf50; }}
+            .status-waiting_7_days {{ color: #ff9800; }}
+            .status-failed {{ color: #f44336; }}
+        </style>
+    </head>
+    <body>
+        <div class="sidebar">
+            <h2>TG Accounts</h2>
+            {"".join([f'<div class="account"><b>+{phone}</b><br><span class="status-{acc.get("status", "unknown")}">{acc.get("status", "unknown").upper()}</span></div>' for phone, acc in accounts.items()])}
+        </div>
+        <div class="main">
+            <h1>Live Status</h1>
+            <p><b>Task:</b> {bot_status.get('task')}</p>
+            <p><b>Detail:</b> {bot_status.get('detail')}</p>
+        </div>
+    </body>
+    </html>
+    """
+    return web.Response(text=html, content_type='text/html')
 
 async def self_ping():
     url = f"http://localhost:{config.PORT}/"
@@ -38,13 +69,8 @@ async def self_ping():
 
 async def main():
     app = web.Application()
-    
-    # 🚨 FastAPI ko WSGI handler me wrap karo aur aiohttp ke /panel pe mount karo
-    fastapi_handler = WSGIHandler(fastapi_app)
-    app.router.add_route('*', '/panel', fastapi_handler)
-    app.router.add_route('*', '/panel/{tail:.*}', fastapi_handler)
-    
     app.router.add_get('/', lambda r: web.Response(text="Bot Running!"))
+    app.router.add_get('/panel', panel_handler) # 🚨 Panel route
     
     runner = web.AppRunner(app)
     await runner.setup()
