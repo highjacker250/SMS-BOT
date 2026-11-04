@@ -43,7 +43,7 @@ async def get_best_number_with_ai(service_type="whatsapp"):
     )
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant", # 🚨 NAYA MODEL
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Find the best {service_type} number for me."}
@@ -72,7 +72,7 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                     "content": function_response,
                 })
             second_response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama-3.1-8b-instant", # 🚨 NAYA MODEL
                 messages=messages,
                 temperature=0.1
             )
@@ -92,7 +92,7 @@ async def chat_with_ai_owner(user_msg):
     if not client: return "AI Key missing."
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant", # 🚨 NAYA MODEL
             messages=[
                 {"role": "system", "content": "You are a helpful coding and system architecture assistant for the Owner of a Telegram OTP Bot. Keep answers short, technical, and in Hinglish. Suggest improvements for bot features."},
                 {"role": "user", "content": user_msg}
