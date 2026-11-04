@@ -6,6 +6,7 @@ import config
 from core.scanner import start_scanner, backup_scanner, whatsapp_scanner
 from services.telegram_automation import reset_watchdog_loop
 from services.proxy_manager import proxy_scanner_loop
+from services.warp_manager import start_warp, get_warp_proxy # 🚨 Import WARP
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
@@ -28,9 +29,19 @@ async def web_server():
     await runner.setup()
     await web.TCPSite(runner, '0.0.0.0', config.PORT).start()
 
+async def keep_warp_alive():
+    """Ensures WARP is always running in background."""
+    while True:
+        from services.telegram_automation import ensure_warp
+        await ensure_warp()
+        await asyncio.sleep(300) # Check every 5 mins
+
 async def main():
     await web_server()
     asyncio.create_task(run_fastapi())
+    
+    # 🚨 Start WARP in background
+    asyncio.create_task(start_warp())
     
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
@@ -41,7 +52,8 @@ async def main():
     asyncio.create_task(backup_scanner(bot))
     asyncio.create_task(whatsapp_scanner(bot))
     asyncio.create_task(reset_watchdog_loop())
-    asyncio.create_task(proxy_scanner_loop()) # 🚨 Proxy Loop Added
+    asyncio.create_task(proxy_scanner_loop())
+    asyncio.create_task(keep_warp_alive()) # 🚨 Watchdog for WARP
     
     await dp.start_polling(bot)
 
