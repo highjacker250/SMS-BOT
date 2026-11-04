@@ -1,58 +1,183 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>AI TG Panel</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #17212b; color: #fff; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 300px; background: #0e1621; border-right: 1px solid #242f3d; display: flex; flex-direction: column; }
-        .sidebar-header { padding: 20px; font-weight: bold; border-bottom: 1px solid #242f3d; background: #17212b; }
-        .account-list { flex: 1; overflow-y: auto; }
-        .account { padding: 15px; border-bottom: 1px solid #242f3d; cursor: pointer; }
-        .account:hover { background: #202b36; }
-        .status-active { color: #4caf50; }
-        .status-waiting_7_days { color: #ff9800; }
-        .status-failed { color: #f44336; }
-        .status-logging_in { color: #2196f3; }
-        .main { flex: 1; display: flex; flex-direction: column; }
-        .top-bar { padding: 15px; background: #17212b; border-bottom: 1px solid #242f3d; display: flex; justify-content: space-between; }
-        .content { flex: 1; display: flex; align-items: center; justify-content: center; color: #6c7883; flex-direction: column; }
-        .proxy-box { padding: 15px; background: #0e1621; border-top: 1px solid #242f3d; font-size: 12px; color: #6c7883; max-height: 200px; overflow-y: auto; }
-        .proxy-item { padding: 5px 0; border-bottom: 1px solid #242f3d; }
-        .live-status { font-family: monospace; background: #000; padding: 10px; border-radius: 5px; color: #0f0; margin-top: 10px; width: 80%; text-align: left; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telegram OTP Bot Owner Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    /* Same Themes (Copy Paste from your file) */
+    :root, [data-theme="telegram-dark"] {
+      --bg-primary: #17212b; --bg-secondary: #0e1621; --bg-surface: #242f3d;
+      --bg-surface-hover: #1c2733; --bg-active: #2b5278; --accent: #5288c1;
+      --text-primary: #f5f5f5; --text-secondary: #7f91a4; --border-color: #0e1621;
+      --chat-bubble-in: #182533; --chat-bubble-out: #2b5278;
+      --status-active: #4fae4e; --status-waiting: #e8a838; --status-failed: #e53935;
+    }
+    [data-theme="matrix-green"] { --bg-primary: #050b05; --bg-secondary: #020502; --accent: #00ff66; --text-primary: #d4ffd4; --status-active: #00ff66; }
+    [data-theme="cyberpunk-purple"] { --bg-primary: #120b22; --bg-secondary: #0a0614; --accent: #ff007f; --text-primary: #f8e9ff; --status-active: #00f0ff; }
+    [data-theme="ocean-blue"] { --bg-primary: #0f1c2e; --bg-secondary: #08111e; --accent: #38bdf8; --text-primary: #f0f9ff; --status-active: #34d399; }
+    [data-theme="midnight-black"] { --bg-primary: #0a0a0a; --bg-secondary: #000000; --accent: #e5e5e5; --text-primary: #ffffff; --status-active: #22c55e; }
+    [data-theme="light-mode"] { --bg-primary: #ffffff; --bg-secondary: #f4f4f5; --accent: #3390ec; --text-primary: #111827; --status-active: #16a34a; }
+
+    * { box-sizing: border-box; font-family: 'Roboto', sans-serif; transition: background-color 0.2s, color 0.2s; }
+    body { background-color: var(--bg-secondary); color: var(--text-primary); overflow: hidden; }
+    
+    /* Toggle Switch */
+    .switch-checkbox:checked + .switch-label { background-color: var(--accent); }
+    .switch-checkbox:checked + .switch-label .switch-handle { transform: translateX(20px); }
+    
+    /* Modal Animation */
+    .theme-modal { transform: translateY(-20px) scale(0.96); opacity: 0; pointer-events: none; transition: all 0.25s; }
+    .theme-modal.active { transform: translateY(0) scale(1); opacity: 1; pointer-events: auto; }
+  </style>
 </head>
-<body>
-    <div class="sidebar">
-        <div class="sidebar-header">TG Accounts</div>
-        <div class="account-list">
-            {% for phone, acc in accounts.items() %}
-            <div class="account" onclick="alert('Chat view for {{ phone }} coming soon!')">
-                <div style="font-weight: 500; font-size: 16px;">+{{ phone }}</div>
-                <div style="font-size: 12px; margin-top: 5px;" class="status-{{ acc.status }}">
-                    ● {{ acc.status | replace('_', ' ') | upper }}
+<body class="h-screen w-screen flex flex-col antialiased" data-theme="telegram-dark">
+
+  <!-- HEADER (Same) -->
+  <header class="h-12 w-full flex items-center justify-between px-4 z-20 border-b" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
+    <div class="flex items-center space-x-3">
+      <div class="flex items-center space-x-2">
+        <i class="fa-brands fa-telegram text-xl" style="color: var(--accent);"></i>
+        <span class="font-bold text-sm">AI TG Sentinel</span>
+      </div>
+    </div>
+    <!-- Hunting Toggle -->
+    <div class="flex items-center space-x-3 px-3 py-1 rounded-full border" style="background-color: var(--bg-surface); border-color: var(--border-color);">
+      <span class="text-xs font-semibold">Hunting:</span>
+      <label for="huntingToggle" class="switch-label block w-11 h-6 rounded-full cursor-pointer relative" style="background-color: var(--bg-surface-hover);">
+        <span class="switch-handle absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform flex items-center justify-center">
+            <i class="fa-solid fa-bolt text-[9px] text-amber-500"></i>
+        </span>
+      </label>
+      <input type="checkbox" id="huntingToggle" class="hidden" checked>
+      <span id="huntingStatusBadge" class="text-xs font-bold px-2 py-0.5 rounded text-emerald-400 bg-emerald-950/40">ON</span>
+    </div>
+    <!-- Theme Button -->
+    <button id="themeButton" class="text-xs px-3 py-1.5 rounded-lg border" style="background-color: var(--bg-surface); border-color: var(--border-color);">
+        <i class="fa-solid fa-paintbrush" style="color: var(--accent);"></i> Themes
+    </button>
+  </header>
+
+  <!-- MAIN 3 COLUMNS -->
+  <main class="flex-1 flex w-full overflow-hidden">
+    
+    <!-- LEFT SIDEBAR (Accounts) -->
+    <aside class="w-[320px] flex-shrink-0 flex flex-col border-r" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
+      <div class="p-3 border-b" style="border-color: var(--border-color);">
+        <h2 class="text-xs font-bold uppercase" style="color: var(--text-secondary);">Live Accounts ({{ accounts|length }})</h2>
+      </div>
+      
+      <!-- 🚨 YAHAN JINJA LOOP LAGAYA HAI -->
+      <div class="flex-1 overflow-y-auto p-2 space-y-2">
+        {% for acc in accounts %}
+        <div class="account-card p-3 rounded-xl border cursor-pointer hover:opacity-90 transition" style="background-color: var(--bg-surface); border-color: var(--border-color);" onclick="switchAccount('{{ acc.phone }}')">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-bold">{{ acc.phone }}</h4>
+                    <p class="text-[10px] mt-1" style="color: var(--text-secondary);">Session: {{ acc.session }}</p>
+                </div>
+                {% if acc.status == 'active' %}
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded text-emerald-400 bg-emerald-900/30">ACTIVE</span>
+                {% elif acc.status == 'waiting_7_days' %}
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded text-amber-400 bg-amber-900/30">WAIT</span>
+                {% else %}
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded text-rose-400 bg-rose-900/30">FAILED</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        
+        {% if not accounts %}
+        <div class="p-4 text-center text-xs" style="color: var(--text-secondary);">No accounts logged in yet.</div>
+        {% endif %}
+      </div>
+    </aside>
+
+    <!-- MIDDLE PANEL (Chats Dummy) -->
+    <section class="w-[350px] flex-shrink-0 flex flex-col border-r" style="background-color: var(--bg-primary); border-color: var(--border-color);">
+        <div class="p-4 border-b" style="border-color: var(--border-color);">
+            <h2 class="text-sm font-bold" id="chatHeaderName">Select an Account</h2>
+        </div>
+        <div class="flex-1 p-4 text-center text-xs" style="color: var(--text-secondary);">
+            <i class="fa-regular fa-comments text-3xl mb-2"></i>
+            <p>Chats will load here...</p>
+        </div>
+    </section>
+
+    <!-- RIGHT PANEL (Live Status + Actions) -->
+    <section class="flex-1 flex flex-col relative" style="background-color: var(--bg-primary);">
+        <div class="p-5 border-b flex items-center justify-between" style="background-color: var(--bg-surface); border-color: var(--border-color);">
+            <div>
+                <h1 class="text-lg font-bold" id="activePhoneDisplay">Select Account</h1>
+                <p class="text-xs" style="color: var(--text-secondary);">Manage your Telegram Session</p>
+            </div>
+            
+            <!-- LIVE AI STATUS -->
+            <div class="flex items-center space-x-3 px-4 py-2 rounded-xl border" style="background-color: var(--bg-primary); border-color: var(--border-color);">
+                <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+                <div>
+                    <p class="text-[10px] font-black uppercase text-emerald-400">AI Live Status</p>
+                    <!-- 🚨 YAHAN LIVE STATUS AAYEGA -->
+                    <p class="text-xs font-medium max-w-[200px] truncate">{{ bot_status.task }} - {{ bot_status.detail }}</p>
                 </div>
             </div>
-            {% endfor %}
         </div>
-        <div class="proxy-box">
-            <b>Working Proxies ({{ proxies | length }}):</b><br>
-            {% for p in proxies %}
-            <div class="proxy-item">{{ p }}</div>
-            {% endfor %}
-        </div>
-    </div>
-    <div class="main">
-        <div class="top-bar">
-            <div><b>AI Live Status:</b> {{ bot_status.task }}</div>
-            <div><b>Detail:</b> {{ bot_status.detail }}</div>
-        </div>
-        <div class="content">
-            <h1>Select an account to view messages</h1>
-            <div class="live-status">
-                > {{ bot_status.task }}...<br>
-                > {{ bot_status.detail }}<br>
+
+        <div class="flex-1 flex flex-col items-center justify-center text-xs" style="color: var(--text-secondary);">
+            <i class="fa-solid fa-shield-halved text-5xl mb-4 opacity-50"></i>
+            <h3 class="text-base font-bold text-white mb-2">Owner Control Panel</h3>
+            <p>Select an account from left sidebar to manage it.</p>
+            
+            <!-- ACTION BUTTONS -->
+            <div class="mt-6 flex space-x-4">
+                <button class="px-4 py-2 rounded-lg text-white font-bold" style="background-color: var(--accent);" onclick="alert('Change Username Feature Coming Soon')">Change Username</button>
+                <button class="px-4 py-2 rounded-lg text-white font-bold bg-amber-600" onclick="alert('2FA Enable Feature Coming Soon')">Enable 2FA</button>
+                <button class="px-4 py-2 rounded-lg text-white font-bold bg-rose-600" onclick="alert('Logout Feature Coming Soon')">Logout Device</button>
             </div>
         </div>
+    </section>
+  </main>
+
+  <!-- THEME MODAL (Same) -->
+  <div id="themeModalBackdrop" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 hidden">
+    <div id="themeModal" class="w-full max-w-xl bg-gray-800 rounded-2xl p-6 shadow-2xl theme-modal">
+      <h3 class="text-white text-lg font-bold mb-4">Select Theme</h3>
+      <div class="grid grid-cols-3 gap-3">
+        <button class="p-3 bg-gray-700 rounded-lg text-white" onclick="applyTheme('telegram-dark')">Classic Dark</button>
+        <button class="p-3 bg-green-900 rounded-lg text-white" onclick="applyTheme('matrix-green')">Matrix Green</button>
+        <button class="p-3 bg-purple-900 rounded-lg text-white" onclick="applyTheme('cyberpunk-purple')">Cyberpunk</button>
+        <button class="p-3 bg-blue-900 rounded-lg text-white" onclick="applyTheme('ocean-blue')">Ocean Blue</button>
+        <button class="p-3 bg-black rounded-lg text-white" onclick="applyTheme('midnight-black')">Midnight Black</button>
+        <button class="p-3 bg-white text-black rounded-lg" onclick="applyTheme('light-mode')">Light Mode</button>
+      </div>
+      <button class="mt-4 w-full bg-gray-600 text-white py-2 rounded-lg" onclick="closeThemeModal()">Close</button>
     </div>
+  </div>
+
+  <script>
+    // Theme Logic (Same)
+    function applyTheme(theme) {
+        document.body.setAttribute('data-theme', theme);
+    }
+
+    // Open/Close Modal
+    document.getElementById('themeButton').addEventListener('click', () => {
+        document.getElementById('themeModalBackdrop').classList.remove('hidden');
+        document.getElementById('themeModal').classList.add('active');
+    });
+    function closeThemeModal() {
+        document.getElementById('themeModalBackdrop').classList.add('hidden');
+        document.getElementById('themeModal').classList.remove('active');
+    }
+
+    // Switch Account (Dummy logic for now)
+    function switchAccount(phone) {
+        document.getElementById('activePhoneDisplay').innerText = phone;
+        document.getElementById('chatHeaderName').innerText = "Chats for " + phone;
+    }
+  </script>
 </body>
 </html>
