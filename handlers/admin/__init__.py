@@ -7,4 +7,11 @@ from .ai_chat import admin_router as ai_chat_router
 
 from aiogram import Router
 admin_router = Router()
-admin_router.include_routers(dash_router, srv_router, user_admin_router, tg_login_router, proxy_router, ai_chat_router)2
+admin_router.include_routers(
+    dash_router, 
+    srv_router, 
+    user_admin_router, 
+    tg_login_router, 
+    proxy_router, 
+    ai_chat_router
+)
