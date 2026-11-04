@@ -3,7 +3,7 @@ import logging
 import aiohttp
 from contextlib import asynccontextmanager
 
-# 🚨 PYTHON 3.14 FIX
+# 🚨 PYTHON 3.14 FIX for Pyrogram
 try:
     asyncio.get_event_loop()
 except RuntimeError:
@@ -13,10 +13,10 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 import uvicorn
 import config
 
+# Tere bot ke modules
 from core.scanner import start_scanner, backup_scanner, whatsapp_scanner
 from services.telegram_automation import reset_watchdog_loop
 from services.proxy_manager import proxy_scanner_loop
@@ -28,12 +28,12 @@ import database as db
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("Main")
 
+# Bot Initialize
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 dp.include_routers(owner_router, admin_router, user_router)
 
-templates = Jinja2Templates(directory="web_panel/templates")
-
+# Render Free Tier ke liye Self-Ping
 async def self_ping():
     url = f"http://localhost:{config.PORT}/"
     while True:
@@ -45,6 +45,7 @@ async def self_ping():
         except Exception:
             pass
 
+# Lifespan (Start & Stop)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Starting Bot Polling and Scanners...")
@@ -61,17 +62,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# 🚨 Route for Main Dashboard (Part 1/2/3)
+# 🚨 FIXED ROUTE 1: Main Dashboard (Direct file read, no Jinja2 conflict)
 @app.get("/", response_class=HTMLResponse)
-async def serve_dashboard(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def serve_dashboard():
+    try:
+        with open("web_panel/templates/index.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except Exception as e:
+        log.error(f"Dashboard HTML error: {e}")
+        return HTMLResponse(content="<h1>Error loading Dashboard. Check logs.</h1>", status_code=500)
 
-# 🚨 Route for Telegram UI (Part 4)
+# 🚨 FIXED ROUTE 2: Telegram UI (Direct file read, no Jinja2 conflict)
 @app.get("/telegram", response_class=HTMLResponse)
-async def serve_telegram(request: Request):
-    return templates.TemplateResponse("telegram.html", {"request": request})
+async def serve_telegram():
+    try:
+        with open("web_panel/templates/telegram.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except Exception as e:
+        log.error(f"Telegram HTML error: {e}")
+        return HTMLResponse(content="<h1>Error loading Telegram UI. Check logs.</h1>", status_code=500)
 
-# 🚨 LIVE API: Accounts fetch karne ke liye
+# 🚨 LIVE API: Real Accounts fetch karne ke liye
 @app.get("/api/get_accounts")
 async def get_accounts():
     d = db.load_data()
@@ -88,6 +99,18 @@ async def get_accounts():
         })
         
     return JSONResponse(content={"status": "success", "accounts": result})
+
+# 🚨 LIVE API: Health status
+@app.get("/api/health")
+async def get_health():
+    d = db.load_data()
+    status = db.get_bot_status()
+    return JSONResponse(content={
+        "task": status.get("task", "Idle"),
+        "detail": status.get("detail", "Waiting..."),
+        "accounts_count": len(d.get("telegram_accounts", {})),
+        "working_proxies": len(d.get("working_proxies", []))
+    })
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=config.PORT)
