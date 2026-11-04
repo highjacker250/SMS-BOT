@@ -306,4 +306,146 @@ async def admin_rmdo(cq: CallbackQuery):
 
 @admin_router.callback_query(F.data == "admin:add_country")
 async def admin_add_country(cq: CallbackQuery, state: FSMContext):
-    await c
+    await cq.answer()
+    await state.set_state(S.add_country)
+    await cq.message.edit_text("Enter Country Name:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:manage_fb", "❌")]]), parse_mode="HTML")
+
+@admin_router.message(S.add_country)
+async def admin_add_country_done(msg: Message, state: FSMContext):
+    await state.clear()
+    country = msg.text.strip().title()
+    d = db.load_data()
+    if country not in get_countries(d):
+        d.setdefault("custom_countries", []).append(country)
+        db.save_data(d)
+    await msg.answer(f"✅ {country} added!", reply_markup=admin_kb())
+
+@admin_router.callback_query(F.data == "admin:dead_filter")
+async def admin_dead_filter(cq: CallbackQuery):
+    await cq.answer()
+    await cq.message.edit_text("🔄 Checking...")
+    d = db.load_data()
+    dead = []
+    for i, fb in enumerate(d.get("firebases", [])):
+        ping = await fbu.check_ping(fb["url"], fb.get("auth"))
+        if "Timeout" in ping: dead.append((i, fb))
+    if not dead: return await cq.message.edit_text("✅ No dead bases!", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:manage_fb", "🔙")]]))
+    kb = [[btn(f"🗑 {fb.get('label', 'Base')}", f"admin:rmdo_global:{i}")] for i, fb in dead]
+    kb.append([btn("back", "admin:manage_fb", "🔙")])
+    await cq.message.edit_text(f"☠️ Found {len(dead)} dead bases:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+@admin_router.callback_query(F.data.startswith("admin:rmdo_global:"))
+async def admin_rmdo_global(cq: CallbackQuery):
+    await cq.answer("✅ Removed!")
+    idx = int(cq.data.split(":")[2])
+    d = db.load_data()
+    if 0 <= idx < len(d["firebases"]):
+        del d["firebases"][idx]
+        db.save_data(d)
+    await admin_manage_fb(cq)
+
+@admin_router.callback_query(F.data == "admin:add_bulk")
+async def admin_bulk_start(cq: CallbackQuery, state: FSMContext):
+    await cq.answer()
+    await state.set_state(S.add_bulk_urls)
+    await cq.message.edit_text("Send URLs (<code>URL</code> or <code>URL | Auth</code> or <code>URL | Auth | Secret</code>):", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:manage_fb", "❌")]]), parse_mode="HTML")
+
+@admin_router.message(S.add_bulk_urls)
+async def admin_bulk_done(msg: Message, state: FSMContext):
+    await state.clear()
+    d = db.load_data()
+    added = 0
+    country = "India"
+    for line in msg.text.strip().split("\n"):
+        if not line.strip(): continue
+        parts = [p.strip() for p in line.split("|")]
+        url = parts[0]
+        auth_key = parts[1] if len(parts) > 1 else ""
+        is_secret = True if len(parts) > 2 and parts[2].lower() == "secret" else False
+        if "#DARKs=" in url or "?s=" in url:
+            dec = fbu.decode_panel_url(url)
+            if dec: url = dec[0]
+        if url.startswith("http"):
+            d["firebases"].append({"url": url, "label": "Base ?", "country": country, "auth": auth_key, "secret": is_secret})
+            added += 1
+    curr = 1
+    for f in d["firebases"]:
+        if f.get("country") == country:
+            f["label"] = f"Base {curr}"
+            curr += 1
+    db.save_data(d)
+    await msg.answer(f"✅ {added} Bases added!", reply_markup=admin_kb())
+
+@admin_router.callback_query(F.data == "admin:users")
+async def admin_users_list(cq: CallbackQuery):
+    await cq.answer()
+    d = db.load_data()
+    users = d.get("users", {})
+    
+    if not users:
+        return await cq.message.edit_text("👥 No users found.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]))
+        
+    text = f"👥 <b>Total Users: {len(users)}</b>\n\n"
+    kb = []
+    
+    for uid, u_data in list(users.items())[:20]:
+        name = u_data.get("name", "Unknown")
+        is_ban = uid in d.get("banned", [])
+        status = "🚫" if is_ban else "✅"
+        kb.append([btn(f"{status} {name[:15]}", f"admin:user_info:{uid}", "👤")])
+        
+    kb.append([btn("back", "admin:home", "🔙")])
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@admin_router.callback_query(F.data.startswith("admin:user_info:"))
+async def admin_user_info(cq: CallbackQuery):
+    await cq.answer()
+    uid = cq.data.split(":")[2]
+    d = db.load_data()
+    u_data = d.get("users", {}).get(uid)
+    
+    if not u_data:
+        return await cq.answer("User not found!", show_alert=True)
+        
+    is_ban = uid in d.get("banned", [])
+    name = u_data.get("name", "Unknown")
+    joined = get_ist_time_str(u_data.get("joined", 0))
+    otp_count = len(u_data.get("otp_history", []))
+    
+    text = (
+        f"👤 <b>User Info</b>\n\n"
+        f"🆔 <b>ID:</b> <code>{uid}</code>\n"
+        f"📛 <b>Name:</b> {name}\n"
+        f"📅 <b>Joined:</b> {joined}\n"
+        f"📜 <b>Total OTPs:</b> {otp_count}\n"
+        f"🚫 <b>Status:</b> {'BANNED' if is_ban else 'ACTIVE'}\n\n"
+    )
+    
+    kb = []
+    if is_ban:
+        kb.append([btn("unban user", f"admin:unban:{uid}", "✅")])
+    else:
+        kb.append([btn("ban user", f"admin:ban:{uid}", "🚫")])
+        
+    kb.append([btn("back", "admin:users", "🔙")])
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@admin_router.callback_query(F.data.startswith("admin:ban:"))
+async def admin_ban_user(cq: CallbackQuery):
+    await cq.answer("User Banned!", show_alert=True)
+    uid = cq.data.split(":")[2]
+    d = db.load_data()
+    banned = d.setdefault("banned", [])
+    if uid not in banned: banned.append(uid)
+    db.save_data(d)
+    await admin_user_info(cq)
+
+@admin_router.callback_query(F.data.startswith("admin:unban:"))
+async def admin_unban_user(cq: CallbackQuery):
+    await cq.answer("User Unbanned!", show_alert=True)
+    uid = cq.data.split(":")[2]
+    d = db.load_data()
+    banned = d.setdefault("banned", [])
+    if uid in banned: banned.remove(uid)
+    db.save_data(d)
+    await admin_user_info(cq)2
