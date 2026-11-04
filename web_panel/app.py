@@ -9,7 +9,14 @@ templates = Jinja2Templates(directory="web_panel/templates")
 
 @app.get("/panel", response_class=HTMLResponse)
 async def owner_panel(request: Request):
-    # Note: Yahan Owner authentication (password check) lagega
     d = db.load_data()
     accounts = d.get("telegram_accounts", {})
-    return templates.TemplateResponse("index.html", {"request": request, "accounts": accounts})
+    working_proxies = d.get("working_proxies", [])
+    bot_status = db.get_bot_status()
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request, 
+        "accounts": accounts,
+        "proxies": working_proxies,
+        "bot_status": bot_status
+    })
