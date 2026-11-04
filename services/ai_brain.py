@@ -45,7 +45,7 @@ async def get_best_number_with_ai(service_type="whatsapp"):
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile", # 🚨 NAYA MODEL
+            model="openai/gpt-oss-120b", # 🚨 NAYA MODEL (Groq recommended)
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Find the best {service_type} number for me."}
@@ -78,7 +78,7 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                 })
 
             second_response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile", # 🚨 NAYA MODEL
+                model="openai/gpt-oss-120b", # 🚨 NAYA MODEL
                 messages=messages,
                 temperature=0.1
             )
@@ -96,4 +96,4 @@ async def get_best_number_with_ai(service_type="whatsapp"):
         return None, "AI ne koi number select nahi kiya."
     except Exception as e:
         log.error(f"AI Brain Error: {e}")
-        return None, f"AI Error: {str(e)}"
+        return None, f"AI Error: {str(e)}", 
