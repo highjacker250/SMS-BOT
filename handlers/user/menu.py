@@ -79,4 +79,4 @@ async def vvip_country(cq: CallbackQuery):
         [btn("any service", f"user:service:{country}:any", "🌐")],
         [btn("back", "vvip:home", "🔙")]
     ]
-    await cq.message.edit_text(f"🌟 {country} - <b>Select Service:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")w
+    await cq.message.edit_text(f"🌟 {country} - <b>Select Service:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
