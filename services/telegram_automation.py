@@ -2,13 +2,23 @@ import asyncio
 import logging
 import time
 import random
+import traceback # 🚨 Naya import
 from pyrogram import Client
-from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid
+from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid, RPCError
 import config
 import database as db
 from services.email_parser import get_telegram_email_otp
+from services.warp_manager import get_warp_proxy, start_warp
 
 log = logging.getLogger("TGAuto")
+_WARP_READY = False
+
+async def ensure_warp():
+    global _WARP_READY
+    if not _WARP_READY:
+        log.info("WARP not ready. Attempting to start...")
+        _WARP_READY = await start_warp()
+    return _WARP_READY
 
 async def auto_login_tg(phone_number):
     log.info(f"Starting Auto-Login for {phone_number}")
@@ -17,21 +27,13 @@ async def auto_login_tg(phone_number):
     if not d.get("hunting_enabled", True):
         return {"status": "failed", "reason": "Hunting is disabled by Owner"}
 
-    # 🚨 PRIORITY 1: Cloudflare WARP Proxy
+    # 🚨 PRIORITY 1: Cloudflare WARP
     proxy_dict = None
-    if config.WARP_PROXY:
-        try:
-            parts = config.WARP_PROXY.replace("socks5://", "").split(":")
-            proxy_dict = {
-                "scheme": "socks5",
-                "hostname": parts[0],
-                "port": int(parts[1])
-            }
-            log.info(f"Using WARP Proxy: {parts[0]}:{parts[1]}")
-        except Exception as e:
-            log.error(f"WARP proxy parse error: {e}")
-
-    # 🚨 PRIORITY 2: Fallback to Free Proxies
+    if await ensure_warp():
+        proxy_dict = get_warp_proxy()
+        log.info("Using Cloudflare WARP Proxy.")
+    
+    # 🚨 PRIORITY 2: Fallback to Custom/Free Proxies
     if not proxy_dict:
         proxies = d.get("working_proxies", [])
         if proxies:
@@ -50,38 +52,55 @@ async def auto_login_tg(phone_number):
     )
 
     try:
+        log.info("Connecting to Telegram...")
         await app.connect()
+        log.info("Connected. Sending code request...")
+        
         try:
             sent_code = await app.send_code(phone_number)
+            log.info("Code request sent successfully.")
         except FloodWait as e:
             await app.disconnect()
-            return {"status": "failed", "reason": f"FloodWait: {e.value} seconds"}
+            return {"status": "failed", "reason": f"FloodWait: {e.value} seconds. Try after {e.value/60} mins."}
+        except RPCError as e:
+            await app.disconnect()
+            return {"status": "failed", "reason": f"Telegram API Error: {str(e)}"}
             
-        log.info(f"Code sent. Waiting for Email OTP for {phone_number}...")
+        log.info(f"Waiting for Email OTP for {phone_number}...")
         email_otp = await get_telegram_email_otp(timeout=90) 
         
         if not email_otp:
             await app.disconnect()
-            return {"status": "failed", "reason": "Email OTP timeout (Check Gmail)"}
+            return {"status": "failed", "reason": "Email OTP timeout. Check Gmail (iamnotready171@gmail.com) for OTP."}
 
+        log.info(f"Email OTP received: {email_otp}. Trying to sign in...")
+        
         try:
             await app.sign_in(phone_number, sent_code.phone_code_hash, email_otp)
         except SessionPasswordNeeded:
             await app.disconnect()
-            return {"status": "failed", "reason": "2FA Password Enabled"}
+            return {"status": "failed", "reason": "2FA Password is enabled on this account."}
         except PhoneCodeInvalid:
             await app.disconnect()
-            return {"status": "failed", "reason": "Invalid OTP passed"}
+            return {"status": "failed", "reason": "Invalid OTP passed."}
 
         session_string = await app.export_session_string()
         await app.disconnect()
 
+        log.info(f"Login Successful for {phone_number}!")
         return {"status": "success", "session": session_string, "phone": phone_number}
 
     except Exception as e:
-        log.error(f"Login failed for {phone_number}: {e}")
-        if app.is_connected: await app.disconnect()
-        return {"status": "failed", "reason": str(e)}
+        # 🚨 Print full traceback for debugging
+        error_details = traceback.format_exc()
+        log.error(f"Login failed for {phone_number}:\n{error_details}")
+        
+        if app.is_connected: 
+            await app.disconnect()
+            
+        # Get specific error if possible
+        error_str = str(e) if str(e) else error_details.split("\n")[-2]
+        return {"status": "failed", "reason": error_str}
 
 async def reset_watchdog_loop():
     while True:
