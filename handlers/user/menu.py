@@ -59,7 +59,6 @@ async def user_support(cq: CallbackQuery):
         parse_mode="HTML"
     )
 
-# 🚨 VVIP FLOW (Add this)
 @user_router.callback_query(F.data == "vvip:home")
 async def vvip_home(cq: CallbackQuery):
     await cq.answer()
