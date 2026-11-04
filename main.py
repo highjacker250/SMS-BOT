@@ -4,12 +4,13 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 import config
 from core.scanner import start_scanner, backup_scanner, whatsapp_scanner
-from services.telegram_automation import reset_watchdog_loop # 🚨 Naya
+from services.telegram_automation import reset_watchdog_loop
+from services.proxy_manager import proxy_scanner_loop
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
 
-# 🚨 FastAPI Web Panel Import
+# FastAPI Import
 from web_panel.app import app as fastapi_app
 from uvicorn import Config, Server
 
@@ -29,8 +30,6 @@ async def web_server():
 
 async def main():
     await web_server()
-    
-    # Start FastAPI panel in background
     asyncio.create_task(run_fastapi())
     
     bot = Bot(token=config.BOT_TOKEN)
@@ -41,7 +40,8 @@ async def main():
     asyncio.create_task(start_scanner(bot))
     asyncio.create_task(backup_scanner(bot))
     asyncio.create_task(whatsapp_scanner(bot))
-    asyncio.create_task(reset_watchdog_loop()) # 🚨 Naya Watchdog
+    asyncio.create_task(reset_watchdog_loop())
+    asyncio.create_task(proxy_scanner_loop()) # 🚨 Proxy Loop Added
     
     await dp.start_polling(bot)
 
