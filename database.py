@@ -7,11 +7,7 @@ log = logging.getLogger("DB")
 supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_KEY) if config.SUPABASE_URL and config.SUPABASE_KEY else None
 _DATA_CACHE = None
 
-_BOT_STATUS = {
-    "task": "Idle",
-    "detail": "Waiting for tasks...",
-    "last_update": 0
-}
+_BOT_STATUS = {"task": "Idle", "detail": "Waiting...", "last_update": 0}
 
 def set_bot_status(task: str, detail: str):
     global _BOT_STATUS
@@ -31,12 +27,11 @@ def load_data():
             if res.data and len(res.data) > 0 and res.data[0]["data"]:
                 data = res.data[0]["data"]
                 data["owner_id"] = config.MAIN_OWNER
-                if "vip_users" not in data: data["vip_users"] = []
-                if "device_backups" not in data: data["device_backups"] = {}
-                if "custom_countries" not in data: data["custom_countries"] = []
-                if "upcoming_timers" not in data: data["upcoming_timers"] = {}
-                if "whatsapp_ready_lines" not in data: data["whatsapp_ready_lines"] = {}
-                if "telegram_accounts" not in data: data["telegram_accounts"] = {} # 🚨 Naya
+                for k in ["vip_users", "device_backups", "custom_countries", "upcoming_timers", "whatsapp_ready_lines", "telegram_accounts"]:
+                    if k not in data: data[k] = [] if k in ["vip_users", "custom_countries"] else {}
+                if "hunting_enabled" not in data: data["hunting_enabled"] = True
+                if "custom_proxies" not in data: data["custom_proxies"] = []
+                if "working_proxies" not in data: data["working_proxies"] = []
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
@@ -44,9 +39,9 @@ def load_data():
     _DATA_CACHE = {
         "owner_id": config.MAIN_OWNER, "super_admins": [], "admins": [], "banned": [], 
         "free_mode": True, "users": {}, "firebases": [], "user_leases": {}, 
-        "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}, 
-        "vip_users": [], "device_backups": {}, "custom_countries": [], "upcoming_timers": {},
-        "whatsapp_ready_lines": {}, "telegram_accounts": {}
+        "used_devices": {}, "stats": {"total_otps": 0}, "vip_users": [], "device_backups": {},
+        "custom_countries": [], "upcoming_timers": {}, "whatsapp_ready_lines": {}, "telegram_accounts": {},
+        "hunting_enabled": True, "custom_proxies": [], "working_proxies": []
     }
     return _DATA_CACHE
 
