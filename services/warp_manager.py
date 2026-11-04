@@ -11,13 +11,15 @@ _WARP_PROCESS = None
 async def start_warp():
     global _WARP_PROCESS
     if _WARP_PROCESS is not None:
-        return True # Already running
+        return True 
         
     log.info("Starting Cloudflare WARP (warp-plus)...")
     
     try:
-        # warp-plus SOCKS5 proxy bind karega port 40000 pe
-        cmd = ["warp-plus", "-b", "127.0.0.1:40000", "-4"]
+        # 🚨 FIX: Ab ye current directory (project folder) se execute hoga
+        warp_path = "./warp-plus" 
+        
+        cmd = [warp_path, "-b", "127.0.0.1:40000", "-4"]
         
         _WARP_PROCESS = subprocess.Popen(
             cmd, 
@@ -43,7 +45,7 @@ async def start_warp():
         _WARP_PROCESS = None
         return False
     except FileNotFoundError:
-        log.error("warp-plus executable not found. Check build command.")
+        log.error("warp-plus executable not found in project folder. Check build command.")
         return False
     except Exception as e:
         log.error(f"WARP startup error: {e}")
@@ -57,7 +59,6 @@ def stop_warp():
         log.info("WARP process stopped.")
 
 def get_warp_proxy():
-    """Returns the WARP proxy dict for Pyrogram"""
     return {
         "scheme": "socks5",
         "hostname": "127.0.0.1",
