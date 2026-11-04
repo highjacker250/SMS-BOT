@@ -38,12 +38,17 @@ async def get_online_stats(firebases):
     return total_online, total_devices
 
 def admin_kb():
+    d = db.load_data()
+    hunt_on = d.get("hunting_enabled", True)
+    hunt_btn = btn("hunting ON", "admin:toggle_hunt", "🟢") if hunt_on else btn("hunting OFF", "admin:toggle_hunt", "🔴")
+    
     return InlineKeyboardMarkup(inline_keyboard=[
         [btn("enter as user", "user:main_menu", "👤"), btn("manage servers", "admin:manage_fb", "🔥")],
+        [btn("manage proxies", "admin:proxies", "🌐"), btn("AI Chat", "admin:ai_chat", "🤖")],
         [btn("track device", "admin:track_device", "🔍"), btn("manage vips", "admin:vip", "⭐")],
         [btn("manage users", "admin:users", "👥")],
-        [btn("live status", "admin:status", "📡")],
-        [btn("active timers", "admin:active_timers", "📅")],
+        [btn("live status", "admin:status", "📡"), btn("active timers", "admin:active_timers", "📅")],
+        [hunt_btn],
         [btn("refresh panel", "admin:home", "🔄")]
     ])
 
@@ -55,14 +60,18 @@ async def admin_home_msg(msg: Message):
     total_servers = sum(len(get_servers_grouped(d, c)) for c in countries)
     status_msg = await msg.answer("🔄 Fetching live stats...")
     online_cnt, total_lines = await get_online_stats(fbs)
+    
+    proxy_count = len(d.get("working_proxies", []))
+    
     text = (
         f"👑 <b>{sc('admin dashboard')}</b>\n\n"
         f"🌍 {sc('countries')}: <b>{len(countries)}</b>\n"
         f"🔥 {sc('total servers')}: <b>{total_servers}</b>\n"
         f"🗂 {sc('total bases')}: <b>{len(fbs)}</b>\n"
         f"📱 {sc('online lines')}: <b>{online_cnt}</b> / {total_lines}\n"
-        f"👥 {sc('total users')}: <b>{users_count}</b>\n\n"
-        f"<i>{sc('select an option below to manage the bot')}</i>"
+        f"👥 {sc('total users')}: <b>{users_count}</b>\n"
+        f"🌐 {sc('working proxies')}: <b>{proxy_count}</b>\n\n"
+        f"<i>{sc('select an option below')}</i>"
     )
     try: 
         await status_msg.delete()
@@ -78,6 +87,19 @@ async def admin_panel_cmd(msg: Message):
 async def admin_home(cq: CallbackQuery):
     await cq.answer()
     if not is_admin(cq.from_user.id): return
+    await admin_home_msg(cq.message)
+
+@admin_router.callback_query(F.data == "admin:toggle_hunt")
+async def admin_toggle_hunt(cq: CallbackQuery):
+    await cq.answer()
+    if not is_admin(cq.from_user.id): return
+    d = db.load_data()
+    current = d.get("hunting_enabled", True)
+    d["hunting_enabled"] = not current
+    db.save_data(d)
+    
+    status_str = "ON 🟢" if d["hunting_enabled"] else "OFF 🔴"
+    await cq.answer(f"Hunting turned {status_str}", show_alert=True)
     await admin_home_msg(cq.message)
 
 @admin_router.callback_query(F.data == "admin:status")
