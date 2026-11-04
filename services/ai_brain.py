@@ -34,7 +34,6 @@ tools = [{
 async def get_best_number_with_ai(service_type="whatsapp"):
     if not client:
         return None, "❌ AI API Key nahi mili."
-
     system_prompt = (
         "You are an expert backend AI Agent for a Telegram OTP Bot. "
         "Your job is to select the absolute BEST number for the user. "
@@ -42,10 +41,9 @@ async def get_best_number_with_ai(service_type="whatsapp"):
         "Call this tool, analyze the data (look for high health, high battery, and high chance), and return exactly ONE best `rent_id`. "
         "Output must be pure JSON with keys: `rent_id`, `reason`. Do not add any extra text."
     )
-
     try:
         response = client.chat.completions.create(
-            model="openai/gpt-oss-120b", # 🚨 NAYA MODEL (Groq recommended)
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Find the best {service_type} number for me."}
@@ -54,10 +52,8 @@ async def get_best_number_with_ai(service_type="whatsapp"):
             tool_choice="auto",
             temperature=0.1
         )
-
         response_message = response.choices[0].message
         tool_calls = response_message.tool_calls
-
         if tool_calls:
             available_functions = {"get_ready_whatsapp_lines": get_ready_whatsapp_lines}
             messages = [
@@ -65,7 +61,6 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                 {"role": "user", "content": f"Find the best {service_type} number for me."},
                 response_message
             ]
-
             for tool_call in tool_calls:
                 function_name = tool_call.function.name
                 function_to_call = available_functions[function_name]
@@ -76,24 +71,20 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                     "name": function_name,
                     "content": function_response,
                 })
-
             second_response = client.chat.completions.create(
-                model="openai/gpt-oss-120b", # 🚨 NAYA MODEL
+                model="llama-3.3-70b-versatile",
                 messages=messages,
                 temperature=0.1
             )
-            
             final_answer = second_response.choices[0].message.content
             log.info(f"AI Decision: {final_answer}")
-
             try:
                 clean_json = final_answer.replace("```json", "").replace("```", "").strip()
                 decision = json.loads(clean_json)
                 return decision.get("rent_id"), decision.get("reason")
             except json.JSONDecodeError:
                 return None, f"AI ne galat format bheja: {final_answer}"
-
         return None, "AI ne koi number select nahi kiya."
     except Exception as e:
         log.error(f"AI Brain Error: {e}")
-        return None, f"AI Error: {str(e)}", 
+        return None, f"AI Error: {str(e)}"
