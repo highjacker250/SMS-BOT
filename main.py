@@ -4,9 +4,9 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 import config
 from core.scanner import start_scanner, backup_scanner, whatsapp_scanner
-from services.telegram_automation import reset_watchdog_loop
+from services.telegram_automation import reset_watchdog_loop, ensure_warp
 from services.proxy_manager import proxy_scanner_loop
-from services.warp_manager import start_warp, get_warp_proxy # 🚨 Import WARP
+from services.warp_manager import start_warp # 🚨 Import WARP
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
@@ -32,7 +32,6 @@ async def web_server():
 async def keep_warp_alive():
     """Ensures WARP is always running in background."""
     while True:
-        from services.telegram_automation import ensure_warp
         await ensure_warp()
         await asyncio.sleep(300) # Check every 5 mins
 
@@ -40,7 +39,7 @@ async def main():
     await web_server()
     asyncio.create_task(run_fastapi())
     
-    # 🚨 Start WARP in background
+    # 🚨 Start WARP in background immediately
     asyncio.create_task(start_warp())
     
     bot = Bot(token=config.BOT_TOKEN)
