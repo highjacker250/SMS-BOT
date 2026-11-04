@@ -7,17 +7,8 @@ from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid
 import config
 import database as db
 from services.email_parser import get_telegram_email_otp
-from services.warp_manager import get_warp_proxy, start_warp
 
 log = logging.getLogger("TGAuto")
-_WARP_READY = False
-
-async def ensure_warp():
-    global _WARP_READY
-    if not _WARP_READY:
-        log.info("WARP not ready. Attempting to start...")
-        _WARP_READY = await start_warp()
-    return _WARP_READY
 
 async def auto_login_tg(phone_number):
     log.info(f"Starting Auto-Login for {phone_number}")
@@ -26,13 +17,21 @@ async def auto_login_tg(phone_number):
     if not d.get("hunting_enabled", True):
         return {"status": "failed", "reason": "Hunting is disabled by Owner"}
 
-    # 🚨 PRIORITY 1: Cloudflare WARP
+    # 🚨 PRIORITY 1: Cloudflare WARP Proxy
     proxy_dict = None
-    if await ensure_warp():
-        proxy_dict = get_warp_proxy()
-        log.info("Using Cloudflare WARP Proxy.")
-    
-    # 🚨 PRIORITY 2: Fallback to Custom/Free Proxies
+    if config.WARP_PROXY:
+        try:
+            parts = config.WARP_PROXY.replace("socks5://", "").split(":")
+            proxy_dict = {
+                "scheme": "socks5",
+                "hostname": parts[0],
+                "port": int(parts[1])
+            }
+            log.info(f"Using WARP Proxy: {parts[0]}:{parts[1]}")
+        except Exception as e:
+            log.error(f"WARP proxy parse error: {e}")
+
+    # 🚨 PRIORITY 2: Fallback to Free Proxies
     if not proxy_dict:
         proxies = d.get("working_proxies", [])
         if proxies:
