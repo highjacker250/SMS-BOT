@@ -16,4 +16,5 @@ class S(StatesGroup):
     add_vip = State()
     set_timer = State()
     ai_chat = State()
-    save_name = State() # 🚨 NAYA STATE
+    save_name = State()
+    tg_login_phone = State() # 🚨 Naya
