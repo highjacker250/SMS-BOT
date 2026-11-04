@@ -3,20 +3,14 @@ import json
 import logging
 from groq import Groq
 import database as db
-from datetime import datetime
+import config
 
 log = logging.getLogger("AIBrain")
-
-# 🚨 Config se API key load kar rahe hain
-import config
 client = Groq(api_key=config.GROQ_API_KEY) if config.GROQ_API_KEY else None
 
-# --- TOOLS JO AI USE KAREGA ---
 def get_ready_whatsapp_lines():
-    """AI is tool ko call karega jab usko WhatsApp lines chahiye hongi."""
     d = db.load_data()
     lines = d.get("whatsapp_ready_lines", {})
-    
     result = []
     for dev_id, info in lines.items():
         result.append({
@@ -28,25 +22,18 @@ def get_ready_whatsapp_lines():
         })
     return json.dumps(result)
 
-# Available tools ka schema
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_ready_whatsapp_lines",
-            "description": "Returns a list of all currently available WhatsApp verification lines with their real-time health, battery, and OTP chance.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        }
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "get_ready_whatsapp_lines",
+        "description": "Returns a list of all currently available WhatsApp verification lines with their real-time health, battery, and OTP chance.",
+        "parameters": {"type": "object", "properties": {}, "required": []}
     }
-]
+}]
 
 async def get_best_number_with_ai(service_type="whatsapp"):
     if not client:
-        return None, "❌ AI API Key nahi mili. Please set GROQ_API_KEY in environment."
+        return None, "❌ AI API Key nahi mili."
 
     system_prompt = (
         "You are an expert backend AI Agent for a Telegram OTP Bot. "
@@ -57,9 +44,8 @@ async def get_best_number_with_ai(service_type="whatsapp"):
     )
 
     try:
-        # Step 1: AI ko message bhejte hain aur tool call trigger karte hain
         response = client.chat.completions.create(
-            model="llama3-70b-8192", # Groq ka smartest free model
+            model="llama-3.3-70b-versatile", # 🚨 NAYA MODEL
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Find the best {service_type} number for me."}
@@ -72,11 +58,8 @@ async def get_best_number_with_ai(service_type="whatsapp"):
         response_message = response.choices[0].message
         tool_calls = response_message.tool_calls
 
-        # Step 2: Agar AI ne tool call kiya, toh hum data fetch karke wapas bhejte hain
         if tool_calls:
-            available_functions = {
-                "get_ready_whatsapp_lines": get_ready_whatsapp_lines,
-            }
+            available_functions = {"get_ready_whatsapp_lines": get_ready_whatsapp_lines}
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Find the best {service_type} number for me."},
@@ -87,7 +70,6 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                 function_name = tool_call.function.name
                 function_to_call = available_functions[function_name]
                 function_response = function_to_call()
-
                 messages.append({
                     "tool_call_id": tool_call.id,
                     "role": "tool",
@@ -95,9 +77,8 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                     "content": function_response,
                 })
 
-            # Step 3: AI ko data wapas de rahe hain, taaki wo final decision de
             second_response = client.chat.completions.create(
-                model="llama3-70b-8192",
+                model="llama-3.3-70b-versatile", # 🚨 NAYA MODEL
                 messages=messages,
                 temperature=0.1
             )
@@ -106,7 +87,6 @@ async def get_best_number_with_ai(service_type="whatsapp"):
             log.info(f"AI Decision: {final_answer}")
 
             try:
-                # Clean up markdown backticks if AI sends them
                 clean_json = final_answer.replace("```json", "").replace("```", "").strip()
                 decision = json.loads(clean_json)
                 return decision.get("rent_id"), decision.get("reason")
