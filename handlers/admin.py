@@ -15,25 +15,19 @@ admin_router = Router()
 async def get_online_stats(firebases):
     total_online = 0
     total_devices = 0
-    
     async def check_fb(fb):
         try:
             url = f"{fb['url']}/clients.json"
             if fb.get("auth"): url += f"&auth={fb['auth']}" if "?" in url else f"?auth={fb['auth']}"
-            
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=15) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data and isinstance(data, dict):
-                            online = 0
-                            for dev in data.values():
-                                if isinstance(dev, dict) and dev.get("status") is True:
-                                    online += 1
+                            online = sum(1 for d in data.values() if isinstance(d, dict) and d.get("status") is True)
                             return online, len(data)
         except: pass
         return 0, 0
-
     for i in range(0, len(firebases), 5):
         chunk = firebases[i:i+5]
         tasks = [check_fb(fb) for fb in chunk]
@@ -41,7 +35,6 @@ async def get_online_stats(firebases):
         for online, total in results:
             total_online += online
             total_devices += total
-            
     return total_online, total_devices
 
 def admin_kb():
@@ -49,7 +42,7 @@ def admin_kb():
         [btn("enter as user", "user:main_menu", "👤"), btn("manage servers", "admin:manage_fb", "🔥")],
         [btn("track device", "admin:track_device", "🔍"), btn("manage vips", "admin:vip", "⭐")],
         [btn("manage users", "admin:users", "👥")],
-        [btn("live status", "admin:status", "📡")], 
+        [btn("live status", "admin:status", "📡")],
         [btn("active timers", "admin:active_timers", "📅")],
         [btn("refresh panel", "admin:home", "🔄")]
     ])
@@ -60,10 +53,8 @@ async def admin_home_msg(msg: Message):
     countries = get_countries(d)
     users_count = len(d.get("users", {}))
     total_servers = sum(len(get_servers_grouped(d, c)) for c in countries)
-    
     status_msg = await msg.answer("🔄 Fetching live stats...")
     online_cnt, total_lines = await get_online_stats(fbs)
-    
     text = (
         f"👑 <b>{sc('admin dashboard')}</b>\n\n"
         f"🌍 {sc('countries')}: <b>{len(countries)}</b>\n"
@@ -93,12 +84,10 @@ async def admin_home(cq: CallbackQuery):
 async def admin_live_status(cq: CallbackQuery):
     await cq.answer()
     status = db.get_bot_status()
-    
     task = status.get("task", "Unknown")
     detail = status.get("detail", "No detail")
     last_update = status.get("last_update", 0)
     time_ago = int(time.time()) - last_update if last_update > 0 else 0
-    
     text = (
         f"📡 <b>BOT LIVE ACTIVITY</b>\n\n"
         f"⚙️ <b>Current Task:</b> {task}\n"
@@ -106,11 +95,7 @@ async def admin_live_status(cq: CallbackQuery):
         f"🕒 <b>Last Update:</b> {time_ago} seconds ago\n\n"
         f"<i>Click Refresh to update.</i>"
     )
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [btn("refresh", "admin:status", "🔄")],
-        [btn("back", "admin:home", "🔙")]
-    ])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[btn("refresh", "admin:status", "🔄")], [btn("back", "admin:home", "🔙")]])
     await cq.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
 
 @admin_router.callback_query(F.data == "admin:active_timers")
@@ -119,18 +104,12 @@ async def admin_active_timers(cq: CallbackQuery):
     d = db.load_data()
     timers = d.get("upcoming_timers", {})
     text = "📅 <b>Active OTP Timers</b>\n\n"
-    if not timers:
-        text += "Koi active timer nahi hai."
+    if not timers: text += "Koi active timer nahi hai."
     else:
         for key, t in timers.items():
             if time.time() < t["target_time"]:
                 text += f"👤 User: <code>{t['user_id']}</code>\n🆔 <code>{t['rent_id']}</code>\n📞 <code>{t['number']}</code>\n⏰ {get_ist_time_str(t['target_time'])}\n\n"
-    
-    await cq.message.edit_text(
-        text, 
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), 
-        parse_mode="HTML"
-    )
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]), parse_mode="HTML")
 
 @admin_router.callback_query(F.data == "admin:vip")
 async def admin_vip(cq: CallbackQuery):
@@ -153,7 +132,6 @@ async def admin_track_device_done(msg: Message, state: FSMContext):
     status = await msg.answer(f"🔄 Searching for <code>{query}</code>...", parse_mode="HTML")
     d = db.load_data()
     found = []
-    
     async def check_fb(fb):
         if query in fb['url'].lower():
             clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
@@ -165,10 +143,8 @@ async def admin_track_device_done(msg: Message, state: FSMContext):
         for dev_id, c in clients.items():
             if query in dev_id.lower() or (isinstance(c, dict) and query in str(c).lower()):
                 found.append((fb, dev_id, c))
-                
     tasks = [check_fb(fb) for fb in d.get("firebases", [])]
     await asyncio.gather(*tasks)
-    
     if not found: return await status.edit_text(f"❌ No device found for <code>{query}</code>.", parse_mode="HTML")
     text = f"🔍 <b>Result ({len(found)}):</b>\n\n"
     for fb, dev_id, c in found[:10]:
@@ -381,19 +357,15 @@ async def admin_users_list(cq: CallbackQuery):
     await cq.answer()
     d = db.load_data()
     users = d.get("users", {})
-    
     if not users:
         return await cq.message.edit_text("👥 No users found.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("back", "admin:home", "🔙")]]))
-        
     text = f"👥 <b>Total Users: {len(users)}</b>\n\n"
     kb = []
-    
     for uid, u_data in list(users.items())[:20]:
         name = u_data.get("name", "Unknown")
         is_ban = uid in d.get("banned", [])
         status = "🚫" if is_ban else "✅"
         kb.append([btn(f"{status} {name[:15]}", f"admin:user_info:{uid}", "👤")])
-        
     kb.append([btn("back", "admin:home", "🔙")])
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
@@ -403,15 +375,12 @@ async def admin_user_info(cq: CallbackQuery):
     uid = cq.data.split(":")[2]
     d = db.load_data()
     u_data = d.get("users", {}).get(uid)
-    
     if not u_data:
         return await cq.answer("User not found!", show_alert=True)
-        
     is_ban = uid in d.get("banned", [])
     name = u_data.get("name", "Unknown")
     joined = get_ist_time_str(u_data.get("joined", 0))
     otp_count = len(u_data.get("otp_history", []))
-    
     text = (
         f"👤 <b>User Info</b>\n\n"
         f"🆔 <b>ID:</b> <code>{uid}</code>\n"
@@ -420,13 +389,11 @@ async def admin_user_info(cq: CallbackQuery):
         f"📜 <b>Total OTPs:</b> {otp_count}\n"
         f"🚫 <b>Status:</b> {'BANNED' if is_ban else 'ACTIVE'}\n\n"
     )
-    
     kb = []
     if is_ban:
         kb.append([btn("unban user", f"admin:unban:{uid}", "✅")])
     else:
         kb.append([btn("ban user", f"admin:ban:{uid}", "🚫")])
-        
     kb.append([btn("back", "admin:users", "🔙")])
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
@@ -438,7 +405,7 @@ async def admin_ban_user(cq: CallbackQuery):
     banned = d.setdefault("banned", [])
     if uid not in banned: banned.append(uid)
     db.save_data(d)
-    await admin_user_info(cq)
+    await admin_user_info(cq) # 🚨 FIX: Extra '2' removed
 
 @admin_router.callback_query(F.data.startswith("admin:unban:"))
 async def admin_unban_user(cq: CallbackQuery):
@@ -448,4 +415,4 @@ async def admin_unban_user(cq: CallbackQuery):
     banned = d.setdefault("banned", [])
     if uid in banned: banned.remove(uid)
     db.save_data(d)
-    await admin_user_info(cq)2
+    await admin_user_info(cq)
