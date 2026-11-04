@@ -19,39 +19,36 @@ from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
 
+# FastAPI Import
 from web_panel.app import app as fastapi_app
-from uvicorn import Config, Server
+from aiohttp_wsgi import WSGIHandler # 🚨 NAYA: FastAPI ko aiohttp me chalane ke liye
 
 logging.basicConfig(level=logging.INFO)
 
-async def run_fastapi():
-    conf = Config(app=fastapi_app, host="0.0.0.0", port=config.PORT + 1, log_level="warning")
-    server = Server(conf)
-    await server.serve()
-
-async def web_server():
-    app = web.Application()
-    app.router.add_get('/', lambda r: web.Response(text="Bot Running!"))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    await web.TCPSite(runner, '0.0.0.0', config.PORT).start()
-
-# 🚨 NAYA: Self-Ping System for Render Free Tier
 async def self_ping():
     url = f"http://localhost:{config.PORT}/"
     while True:
-        await asyncio.sleep(600) # Har 10 min me ping
+        await asyncio.sleep(600)
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=5) as resp:
                     pass
-            logging.info("Self-ping successful.")
-        except Exception as e:
-            logging.warning(f"Self-ping failed: {e}")
+        except Exception:
+            pass
 
 async def main():
-    await web_server()
-    asyncio.create_task(run_fastapi())
+    app = web.Application()
+    
+    # 🚨 FastAPI ko WSGI handler me wrap karo aur aiohttp ke /panel pe mount karo
+    fastapi_handler = WSGIHandler(fastapi_app)
+    app.router.add_route('*', '/panel', fastapi_handler)
+    app.router.add_route('*', '/panel/{tail:.*}', fastapi_handler)
+    
+    app.router.add_get('/', lambda r: web.Response(text="Bot Running!"))
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, '0.0.0.0', config.PORT).start()
     
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
@@ -63,7 +60,7 @@ async def main():
     asyncio.create_task(whatsapp_scanner(bot))
     asyncio.create_task(reset_watchdog_loop())
     asyncio.create_task(proxy_scanner_loop())
-    asyncio.create_task(self_ping()) # 🚨 Start Self Ping
+    asyncio.create_task(self_ping()) 
     
     await dp.start_polling(bot)
 
