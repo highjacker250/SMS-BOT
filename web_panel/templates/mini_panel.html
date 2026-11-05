@@ -1,0 +1,46 @@
+<!-- web_panel/templates/mini_panel.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My AI Accounts</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-1/4 bg-gray-800 p-4 border-r border-gray-700">
+            <h2 class="text-xl font-bold text-cyan-400 mb-4">My Accounts</h2>
+            <ul id="account-list" class="space-y-2">
+                <!-- JS populate karega -->
+            </ul>
+        </div>
+        <!-- Main View -->
+        <div class="w-3/4 p-6 flex items-center justify-center">
+            <iframe id="account-view" class="w-full h-full border-2 border-gray-700 rounded-lg" src="about:blank"></iframe>
+        </div>
+    </div>
+
+    <script>
+        // Data fetch karo (API se)
+        async function fetchMyAccounts() {
+            const res = await fetch('/api/user_accounts/{{ token }}'); // Token pass hoga
+            const data = await res.json();
+            const list = document.getElementById('account-list');
+            list.innerHTML = '';
+            
+            data.accounts.forEach(acc => {
+                const li = document.createElement('li');
+                li.className = "p-3 bg-gray-700 rounded cursor-pointer hover:bg-gray-600";
+                li.textContent = acc.platform + " - " + acc.username;
+                li.onclick = () => {
+                    document.getElementById('account-view').src = acc.view_url;
+                };
+                list.appendChild(li);
+            });
+        }
+        fetchMyAccounts();
+    </script>
+</body>
+</html>
