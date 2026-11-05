@@ -29,6 +29,7 @@ async def handle_force_join(app: Client, bot_username: str, msg):
                         except Exception as e:
                             log.error(f"Failed to join {channel}: {e}")
         
+        # Click "I Joined - Check Now"
         if msg.reply_markup:
             for row in msg.reply_markup.inline_keyboard:
                 for btn in row:
@@ -72,13 +73,18 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
             latest_msg = msg
             break
         
+        is_force_join = False
         if latest_msg and latest_msg.text:
             if "join our channel" in latest_msg.text.lower():
                 is_force_join = await handle_force_join(app, bot_username, latest_msg)
-                if is_force_join:
-                    log.info("Force-Join complete. Sending /start again...")
-                    await app.send_message(bot_username, "/start")
-                    await asyncio.sleep(4)
+                
+        if is_force_join:
+            log.info("Force-Join complete. Sending 'GET NUMBER' directly as text...")
+            await app.send_message(bot_username, "GET NUMBER")
+            await asyncio.sleep(4)
+            async for msg in app.get_chat_history(bot_username, limit=1):
+                latest_msg = msg
+                break
 
         # 🚨 3. Deep scan karo last 5 messages me GET NUMBER button ke liye
         clicked_get_number = False
@@ -96,20 +102,21 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
                                 log.error(f"Click failed: {e}")
                 if clicked_get_number: break
 
-        # 4. Agar fir bhi nahi mila, toh direct text bhejo
+        # 🚨 4. Agar button nahi mila, toh direct text bhejo "GET NUMBER"
         if not clicked_get_number:
-            log.warning("GET NUMBER button not found. Sending text 'GET NUMBER'...")
+            log.warning("GET NUMBER button not found. Sending text 'GET NUMBER' directly...")
             await app.send_message(bot_username, "GET NUMBER")
             await asyncio.sleep(4)
+            # Check karo ki ab button aaya ya nahi
             clicked_get_number = await scan_and_click_button(app, bot_username, "GET NUMBER")
 
         if not clicked_get_number:
-            log.error("Bot menu is broken. Could not find GET NUMBER button.")
+            log.error("Bot menu is broken. Could not find GET NUMBER button even after text.")
             return []
 
         await asyncio.sleep(3)
         
-        # 5. Platform select karo (Deep Scan)
+        # 5. Platform select karo
         clicked_platform = await scan_and_click_button(app, bot_username, target_platform.upper())
         if not clicked_platform:
             # Fallback: First button click
@@ -120,7 +127,7 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
                     break
         await asyncio.sleep(3)
         
-        # 6. Country select karo (Deep Scan)
+        # 6. Country select karo
         clicked_country = await scan_and_click_button(app, bot_username, "INDIA")
         if not clicked_country:
             # Fallback: First button click
