@@ -8,19 +8,10 @@ from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid, 
 from pyrogram.enums import SentCodeType
 import config
 import database as db
-from services.warp_manager import get_warp_proxy, start_warp
 import firebase_utils as fbu
 
 log = logging.getLogger("TGAuto")
-_WARP_READY = False
 
-async def ensure_warp():
-    global _WARP_READY
-    if not _WARP_READY:
-        _WARP_READY = await start_warp()
-    return _WARP_READY
-
-# 🚨 Owner ko live progress bhejne ke liye
 async def update_owner_progress(bot, text):
     try:
         await bot.send_message(config.MAIN_OWNER, f"🤖 <b>AI PROGRESS:</b>\n{text}", parse_mode="HTML")
@@ -55,11 +46,20 @@ async def wait_for_firebase_otp(phone_number):
                                             return otp
         except: pass
         
-        # 5 minute timeout (Isliye ki loop hamesha ke liye na atke)
+        # 5 minute timeout
         if time.time() - start_wait > 300: 
             return None
             
         await asyncio.sleep(1) # Har 1 sec check
+
+# 🚨 Helper to get proxy
+def get_proxy(d):
+    proxies = d.get("working_proxies", [])
+    if proxies:
+        p = random.choice(proxies)
+        ip, port = p.split(":")[:2]
+        return {"scheme": "socks5", "hostname": ip, "port": int(port)}
+    return None
 
 # 🚨 Manual Login (Jab Owner /tglogin command chalaye)
 async def auto_login_manual(bot, phone_number):
@@ -67,23 +67,39 @@ async def auto_login_manual(bot, phone_number):
     await update_owner_progress(bot, f"🔍 <b>Manual Login:</b> <code>{phone_number}</code>")
 
     d = db.load_data()
-    
-    # Proxy Setup
-    proxy_dict = None
-    if await ensure_warp(): proxy_dict = get_warp_proxy()
-    if not proxy_dict:
-        proxies = d.get("working_proxies", [])
-        if proxies:
-            p = random.choice(proxies)
-            ip, port = p.split(":")[:2]
-            proxy_dict = {"scheme": "socks5", "hostname": ip, "port": int(port)}
+    proxy_dict = get_proxy(d)
+    if proxy_dict:
+        log.info(f"Using Proxy: {proxy_dict['hostname']}:{proxy_dict['port']}")
+    else:
+        log.warning("No proxies available. Direct connection (risky).")
 
     app = Client(f"temp_{phone_number.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, phone_number=phone_number, in_memory=True, proxy=proxy_dict)
 
     try:
-        await app.connect()
-        sent_code = await app.send_code(phone_number)
+        max_retries = 3
+        sent_code = None
         
+        for attempt in range(max_retries):
+            try:
+                await app.connect()
+                log.info(f"Connected (Attempt {attempt+1}). Sending code...")
+                sent_code = await app.send_code(phone_number)
+                log.info(f"Code sent successfully!")
+                break
+            except FloodWait as e:
+                if app.is_connected: await app.disconnect()
+                await update_owner_progress(bot, f"⏳ <b>FloodWait!</b>\nPhone: <code>{phone_number}</code>\nWait: {e.value} seconds")
+                return {"status": "failed", "reason": f"FloodWait: {e.value}s"}
+            except Exception as e:
+                log.error(f"Attempt {attempt+1} failed: {e}")
+                if app.is_connected: await app.disconnect()
+                if attempt == max_retries - 1:
+                    return {"status": "failed", "reason": f"Connection failed after 3 attempts: {str(e)}"}
+                await asyncio.sleep(3)
+        
+        if not sent_code:
+            return {"status": "failed", "reason": "Could not send code."}
+
         if sent_code.type == SentCodeType.EMAIL:
             await update_owner_progress(bot, f"📧 <b>Email pe OTP gaya!</b>\nPhone: <code>{phone_number}</code>\nFirebase (SIM) se wait kar raha hu...")
         else:
@@ -91,7 +107,7 @@ async def auto_login_manual(bot, phone_number):
 
         otp = await wait_for_firebase_otp(phone_number)
         if not otp:
-            await app.disconnect()
+            if app.is_connected: await app.disconnect()
             return {"status": "failed", "reason": "OTP nahi aaya (5 min timeout)."}
 
         await update_owner_progress(bot, f"🔑 <b>OTP Mila!</b> <code>{otp}</code>\nLogin kar raha hu...")
@@ -100,10 +116,10 @@ async def auto_login_manual(bot, phone_number):
             await app.sign_in(phone_number, sent_code.phone_code_hash, otp)
             await app.update_profile(email=config.MASTER_EMAIL)
         except SessionPasswordNeeded:
-            await app.disconnect()
+            if app.is_connected: await app.disconnect()
             return {"status": "failed", "reason": "2FA Password Enabled."}
         except PhoneCodeInvalid:
-            await app.disconnect()
+            if app.is_connected: await app.disconnect()
             return {"status": "failed", "reason": "Invalid OTP"}
         
         session_string = await app.export_session_string()
@@ -142,14 +158,24 @@ async def auto_hunter_loop(bot):
                 
                 await update_owner_progress(bot, f"🎯 Target: <code>{phone}</code>\n📱 Device: <code>{dev_id[:8]}</code>\n⏳ Request bhej raha hu...")
                 
-                proxy_dict = None
-                if await ensure_warp(): proxy_dict = get_warp_proxy()
+                proxy_dict = get_proxy(d)
                 
                 app = Client(f"temp_{phone.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, phone_number=phone, in_memory=True, proxy=proxy_dict)
                 
                 try:
-                    await app.connect()
-                    sent_code = await app.send_code(phone)
+                    # 🚨 Retry Logic (2 attempts max for hunter to save time)
+                    sent_code = None
+                    for attempt in range(2):
+                        try:
+                            await app.connect()
+                            sent_code = await app.send_code(phone)
+                            break
+                        except Exception as e:
+                            if app.is_connected: await app.disconnect()
+                            if attempt == 1: raise e
+                            await asyncio.sleep(2)
+                    
+                    if not sent_code: continue
                     
                     if sent_code.type == SentCodeType.EMAIL:
                         await update_owner_progress(bot, f"📧 <b>OTP gaya Email pe!</b>\nPhone: <code>{phone}</code>\nFirebase se wait...")
@@ -191,7 +217,7 @@ async def auto_hunter_loop(bot):
             log.error(f"Hunter Loop Error: {e}")
             await asyncio.sleep(10)
 
-# 🚨 7-Day Watchdog (Timer Complete hote hi wapas try kare)
+# 🚨 7-Day Watchdog
 async def reset_watchdog_loop(bot):
     while True:
         try:
@@ -208,7 +234,6 @@ async def reset_watchdog_loop(bot):
                 if acc.get("status") == "waiting_7_days" and now >= acc.get("reset_time", 0):
                     await update_owner_progress(bot, f"🕒 <b>7 Day Timer Complete!</b>\nAccount: <code>{phone}</code>\nRe-login try kar raha hu...")
                     
-                    # Re-attempt login
                     res = await auto_login_manual(bot, phone)
                     if res["status"] == "success":
                         acc["session"] = res["session"]
