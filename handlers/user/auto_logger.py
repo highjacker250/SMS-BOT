@@ -22,29 +22,53 @@ async def start_auto_logger(cq: CallbackQuery, state: FSMContext):
     uid = cq.from_user.id
     d = db.load_data()
     
-    # 🚨 Check if user has saved sessions
     user_data = d.get("users", {}).get(str(uid), {})
-    saved_session = user_data.get("auto_session")
+    user_sessions = user_data.get("auto_sessions", {}) # Dict of phone: session
     
-    if saved_session:
-        # Agar pehle se session hai, toh direct poochho
-        await state.update_data(phone=user_data.get("auto_phone", "Saved Number"))
-        await state.update_data(session=user_data.get("auto_session"))
-        await ask_bot_username(cq.message, state)
-    else:
-        # Naya account add karo
-        text = (
-            f"🤖 <b>{sc('ai auto logger')}</b>\n\n"
-            f"Bhai, ye AI aapke Telegram account se kaam karega.\n\n"
-            f"<b>Kaise kaam karega?</b>\n"
-            f"1. Aap apna TG number denge.\n"
-            f"2. AI OTP bhejega (aapko phone pe aayega).\n"
-            f"3. Aap OTP turant denge.\n"
-            f"4. Phir aap batayenge kaunsa platform (PayPal/FB) aur kitne accounts.\n\n"
-            f"<b>Apna Telegram Number daalein (with +91):</b>"
+    if user_sessions:
+        # Agar saved accounts hain, toh list dikhao
+        kb = []
+        for phone, session in user_sessions.items():
+            kb.append([btn(f"Use {phone}", f"user:use_saved:{phone}", "✅")])
+        kb.append([btn("Add New Telegram Account", "user:add_new_tg", "➕")])
+        kb.append([btn("cancel", "user:main_menu", "❌")])
+        
+        await cq.message.edit_text(
+            "🤖 <b>AI Auto Logger</b>\n\n"
+            "Aapke saved accounts ye hain. Select karein:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
+            parse_mode="HTML"
         )
-        await state.set_state(S.user_auto_phone)
-        await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:main_menu", "❌")]]), parse_mode="HTML")
+    else:
+        # Agar koi saved account nahi hai, toh direct add new
+        await start_add_new_tg(cq.message, state)
+
+@user_auto_router.callback_query(F.data == "user:add_new_tg")
+async def add_new_tg_btn(cq: CallbackQuery, state: FSMContext):
+    await cq.answer()
+    await start_add_new_tg(cq.message, state)
+
+async def start_add_new_tg(msg, state: FSMContext):
+    text = (
+        f"🤖 <b>{sc('add new telegram account')}</b>\n\n"
+        f"<b>Apna Telegram Number daalein (with +91):</b>"
+    )
+    await state.set_state(S.user_auto_phone)
+    await msg.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:main_menu", "❌")]]), parse_mode="HTML")
+
+@user_auto_router.callback_query(F.data.startswith("user:use_saved:"))
+async def use_saved_account(cq: CallbackQuery, state: FSMContext):
+    await cq.answer()
+    phone = cq.data.split(":")[2]
+    uid = cq.from_user.id
+    d = db.load_data()
+    
+    session = d["users"][str(uid)]["auto_sessions"].get(phone)
+    if not session:
+        return await cq.answer("Session not found!", show_alert=True)
+        
+    await state.update_data(phone=phone, session=session)
+    await ask_bot_username(cq.message, state)
 
 @user_auto_router.message(S.user_auto_phone)
 async def get_phone(msg: Message, state: FSMContext):
@@ -74,10 +98,9 @@ async def get_otp(msg: Message, state: FSMContext):
     if res["status"] == "success":
         d = db.load_data()
         uid = msg.from_user.id
-        # 🚨 Save Session and Phone to DB
         user = d["users"].setdefault(str(uid), {})
-        user["auto_session"] = res["session"]
-        user["auto_phone"] = data['phone']
+        if "auto_sessions" not in user: user["auto_sessions"] = {}
+        user["auto_sessions"][data['phone']] = res["session"] # Save session with phone key
         db.save_data(d)
         
         await state.update_data(session=res["session"])
@@ -100,8 +123,8 @@ async def get_2fa(msg: Message, state: FSMContext):
         d = db.load_data()
         uid = msg.from_user.id
         user = d["users"].setdefault(str(uid), {})
-        user["auto_session"] = res["session"]
-        user["auto_phone"] = data['phone']
+        if "auto_sessions" not in user: user["auto_sessions"] = {}
+        user["auto_sessions"][data['phone']] = res["session"]
         db.save_data(d)
         
         await state.update_data(session=res["session"])
@@ -110,7 +133,6 @@ async def get_2fa(msg: Message, state: FSMContext):
         await status.edit_text(f"❌ 2FA Failed: {res['reason']}")
         await state.clear()
 
-# 🚨 Helper function to ask bot username (Used in both new and saved flows)
 async def ask_bot_username(target_msg, state: FSMContext):
     await state.set_state(S.user_auto_bot_username)
     await target_msg.edit_text(
@@ -150,9 +172,8 @@ async def get_limit(msg: Message, state: FSMContext):
         return await msg.answer("❌ Please enter a valid number.")
         
     data = await state.get_data()
-    
-    # 🚨 Clear state but keep data in local variables
     await state.clear()
+    
     session = data.get('session')
     phone = data.get('phone', 'Saved')
     bot_username = data.get('bot_username')
@@ -166,7 +187,8 @@ async def get_limit(msg: Message, state: FSMContext):
 # 🚨 REAL HUNTER LOGIC (Playwright ke saath)
 # ==========================================
 async def run_user_auto_hunter(bot, user_id, phone, session, bot_username, target, limit):
-    app = Client(f"user_{user_id}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, session_string=session)
+    # Session ko user ID se isolate karo, taaki koi aur use na kar sake
+    app = Client(f"user_{user_id}_{phone.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, session_string=session)
     await app.start()
     
     success = 0
