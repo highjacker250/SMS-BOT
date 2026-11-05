@@ -23,13 +23,15 @@ async def start_auto_logger(cq: CallbackQuery, state: FSMContext):
     d = db.load_data()
     
     user_data = d.get("users", {}).get(str(uid), {})
-    user_sessions = user_data.get("auto_sessions", {}) # Dict of phone: session
+    user_sessions = user_data.get("auto_sessions", {})
     
     if user_sessions:
-        # Agar saved accounts hain, toh list dikhao
+        # Saved accounts list
         kb = []
         for phone, session in user_sessions.items():
-            kb.append([btn(f"Use {phone}", f"user:use_saved:{phone}", "✅")])
+            # Mask phone number for privacy
+            display_phone = phone[:4] + "****" + phone[-4:] if len(phone) > 8 else phone
+            kb.append([btn(f"Use {display_phone}", f"user:use_saved:{phone}", "✅")])
         kb.append([btn("Add New Telegram Account", "user:add_new_tg", "➕")])
         kb.append([btn("cancel", "user:main_menu", "❌")])
         
@@ -40,7 +42,6 @@ async def start_auto_logger(cq: CallbackQuery, state: FSMContext):
             parse_mode="HTML"
         )
     else:
-        # Agar koi saved account nahi hai, toh direct add new
         await start_add_new_tg(cq.message, state)
 
 @user_auto_router.callback_query(F.data == "user:add_new_tg")
