@@ -62,16 +62,16 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
         if latest_msg.reply_markup:
             is_force_join = await handle_force_join(app, bot_username, latest_msg)
         
-        # 🚨 3. Agar Force-Join tha, toh dobara /start bhejo
+        # 🚨 3. Agar Force-Join tha, toh seedha "GET NUMBER" bhejo (Tera idea!)
         if is_force_join:
-            log.info("Force-Join complete. Sending /start again to get main menu...")
-            await app.send_message(bot_username, "/start")
-            await asyncio.sleep(4)
+            log.info("Force-Join complete. Sending 'GET NUMBER' directly as text...")
+            await app.send_message(bot_username, "GET NUMBER")
+            await asyncio.sleep(4) # Wait for bot to reply
             async for msg in app.get_chat_history(bot_username, limit=1):
                 latest_msg = msg
                 break
 
-        # 4. Ab "GET NUMBER" button dhundho
+        # 4. Ab check karo ki kya "GET NUMBER" button aaya?
         clicked_get_number = False
         if latest_msg and latest_msg.reply_markup:
             for row in latest_msg.reply_markup.inline_keyboard:
@@ -83,17 +83,31 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
                         break
                 if clicked_get_number: break
         
-        # 🚨 5. Agar button nahi mila, toh direct text bhejo
+        # 🚨 5. Agar text "GET NUMBER" se kaam nahi chala, toh /start bhejo as backup
         if not clicked_get_number:
-            log.warning("GET NUMBER button not found. Sending text 'GET NUMBER'...")
-            await app.send_message(bot_username, "GET NUMBER")
+            log.warning("GET NUMBER text failed. Sending /start as backup...")
+            await app.send_message(bot_username, "/start")
             await asyncio.sleep(4)
-            # Latest message ko check karo
             async for msg in app.get_chat_history(bot_username, limit=1):
                 latest_msg = msg
                 break
+                
+            # Fir se button dhundho
+            if latest_msg and latest_msg.reply_markup:
+                for row in latest_msg.reply_markup.inline_keyboard:
+                    for btn in row:
+                        if "GET NUMBER" in btn.text.upper() or "GET" in btn.text.upper():
+                            await latest_msg.click(btn.text)
+                            clicked_get_number = True
+                            log.info("Clicked GET NUMBER button (after /start backup).")
+                            break
+                    if clicked_get_number: break
 
-        await asyncio.sleep(2)
+        if not clicked_get_number:
+            log.error("Bot menu is broken. Could not find GET NUMBER button.")
+            return []
+
+        await asyncio.sleep(3)
         
         # 6. Platform select karo
         async for msg2 in app.get_chat_history(bot_username, limit=1):
@@ -141,7 +155,8 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
                                     numbers.extend(found)
                                     log.info(f"Found {len(found)} numbers.")
                                 else:
-                                    log.warning(f"No numbers found in text. Bot might be out of stock. Bot replied: {msg4.text[:50]}")
+                                    log.warning("No numbers found in text. Bot might be out of stock.")
+                                    log.warning(f"Bot replied: {msg4.text[:100]}")
     except Exception as e:
         log.error(f"Scraper Error: {e}")
         
