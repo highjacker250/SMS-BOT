@@ -38,7 +38,8 @@ async def process_tg_login(msg: Message, state: FSMContext):
     d["telegram_accounts"][phone] = {"status": "logging_in", "reset_time": 0, "session": ""}
     db.save_data(d)
     
-    res = await auto_login_tg(phone)
+    # 🚨 Yahan bot pass kiya gaya hai
+    res = await auto_login_tg(msg.bot, phone)
     
     d = db.load_data()
     if res["status"] == "success":
@@ -67,24 +68,22 @@ async def process_tg_login(msg: Message, state: FSMContext):
             db.save_data(d)
             await status_msg.edit_text(f"❌ <b>Login Failed:</b> {res['reason']}", parse_mode="HTML")
 
-# 🚨 NAYA: Telegram Login Stats command
-@admin_router.message(Command("tgstats"))
-async def cmd_tg_stats(msg: Message):
+@admin_router.message(Command("tglist"))
+async def cmd_tg_list(msg: Message):
     if not is_owner(msg.from_user.id): return
     d = db.load_data()
     accs = d.get("telegram_accounts", {})
     
-    total = len(accs)
-    active = sum(1 for a in accs.values() if a.get("status") == "active")
-    waiting = sum(1 for a in accs.values() if a.get("status") == "waiting_7_days")
-    failed = sum(1 for a in accs.values() if a.get("status") == "failed")
+    if not accs: 
+        return await msg.answer("No TG accounts added yet. Use /tglogin <number>")
     
-    text = (
-        f"📊 <b>Telegram Login Stats</b>\n\n"
-        f"📱 Total Accounts: <b>{total}</b>\n"
-        f"✅ Active (Logged In): <b>{active}</b>\n"
-        f"⏳ Waiting (7 Days): <b>{waiting}</b>\n"
-        f"❌ Failed: <b>{failed}</b>\n\n"
-        f"<i>Use /tglist to see detailed status of each account.</i>"
-    )
+    text = "📱 <b>Telegram Accounts Status:</b>\n\n"
+    for phone, info in accs.items():
+        status = info.get("status", "unknown").upper()
+        if status == "WAITING_7_DAYS":
+            remaining = int((info['reset_time'] - time.time()) / 3600)
+            text += f"📞 <code>{phone}</code>\n⏳ Waiting: {remaining}h left\n\n"
+        else:
+            text += f"📞 <code>{phone}</code>\n✅ Status: {status}\n\n"
+            
     await msg.answer(text, parse_mode="HTML")
