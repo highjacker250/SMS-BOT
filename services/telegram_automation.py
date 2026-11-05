@@ -5,13 +5,16 @@ import time
 import random
 import traceback
 from pyrogram import Client
-from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid, RPCError
+from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid, RPCError, PhoneCodeExpired
 from pyrogram.enums import SentCodeType
 import config
 import database as db
 import firebase_utils as fbu
 
 log = logging.getLogger("TGAuto")
+
+# 🚨 Temporary storage for active user logins
+USER_LOGIN_CLIENTS = {}
 
 async def update_owner_progress(bot, text):
     try:
@@ -55,7 +58,7 @@ async def wait_for_firebase_otp(phone_number):
 def get_proxy(d, attempt=0):
     proxies = d.get("working_proxies", [])
     if not proxies:
-        return None # Direct connection
+        return None
     if attempt < len(proxies):
         p = proxies[attempt]
         try:
@@ -63,7 +66,7 @@ def get_proxy(d, attempt=0):
             return {"scheme": "socks5", "hostname": ip, "port": int(port)}
         except:
             return None
-    return None # Saari fail, direct try karo
+    return None
 
 # 🚨 3. Manual Login (Owner /tglogin ke liye)
 async def auto_login_manual(bot, phone_number):
@@ -87,7 +90,7 @@ async def auto_login_manual(bot, phone_number):
             return {"status": "failed", "reason": f"FloodWait: {e.value}s"}
         except Exception as e:
             if app and app.is_connected: await app.disconnect()
-            log.warning(f"Attempt {attempt+1} failed with proxy: {e}")
+            log.warning(f"Attempt {attempt+1} failed: {e}")
             if attempt == max_retries - 1:
                 return {"status": "failed", "reason": f"Connection failed after {max_retries} attempts: {str(e)}"}
             await asyncio.sleep(2)
@@ -194,7 +197,7 @@ async def auto_hunter_loop(bot):
             log.error(f"Hunter Loop Error: {e}")
             await asyncio.sleep(10)
 
-# 🚨 5. 7-Day Watchdog Loop (PURANA FUNCTION - Yahan hai)
+# 🚨 5. 7-Day Watchdog Loop
 async def reset_watchdog_loop(bot):
     while True:
         try:
@@ -226,38 +229,49 @@ async def reset_watchdog_loop(bot):
             log.error(f"Watchdog Error: {e}")
             await asyncio.sleep(3600)
 
-# 🚨 6. User Login Initiate (Naye Auto Logger ke liye)
+# 🚨 6. User Login Initiate (FIXED: Client ko store karta hai)
 async def initiate_user_login(phone_number):
     app = None
     try:
+        # Naya client banao
         app = Client(f"temp_user_{phone_number.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, phone_number=phone_number, in_memory=True)
         await app.connect()
         sent_code = await app.send_code(phone_number)
-        await app.disconnect()
+        
+        # Store the client for later use
+        USER_LOGIN_CLIENTS[phone_number] = app
+        
         return {"status": "success", "hash": sent_code.phone_code_hash}
     except Exception as e:
         if app and app.is_connected: await app.disconnect()
         return {"status": "failed", "reason": str(e)}
 
-# 🚨 7. User Login Complete (Naye Auto Logger ke liye)
+# 🚨 7. User Login Complete (FIXED: Stored client use karta hai)
 async def complete_user_login(phone_number, phone_code_hash, otp=None, password=None):
-    app = None
+    app = USER_LOGIN_CLIENTS.get(phone_number)
+    if not app:
+        return {"status": "failed", "reason": "No active session. Please restart."}
+
     try:
-        app = Client(f"temp_user_{phone_number.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, phone_number=phone_number, in_memory=True)
-        await app.connect()
-        
         if otp:
             try:
                 await app.sign_in(phone_number, phone_code_hash, otp)
             except SessionPasswordNeeded:
-                await app.disconnect()
+                # Don't disconnect, keep for password
                 return {"status": "failed", "reason": "2FA Password required"}
+            except PhoneCodeExpired:
+                if app.is_connected: await app.disconnect()
+                del USER_LOGIN_CLIENTS[phone_number]
+                return {"status": "failed", "reason": "OTP Expired. Please try again."}
         elif password:
             await app.check_password(password)
             
         session = await app.export_session_string()
         await app.disconnect()
+        del USER_LOGIN_CLIENTS[phone_number]
         return {"status": "success", "session": session}
     except Exception as e:
         if app and app.is_connected: await app.disconnect()
+        if phone_number in USER_LOGIN_CLIENTS:
+            del USER_LOGIN_CLIENTS[phone_number]
         return {"status": "failed", "reason": str(e)}
