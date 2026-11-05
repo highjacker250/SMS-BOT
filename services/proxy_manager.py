@@ -1,3 +1,4 @@
+# services/proxy_manager.py
 import aiohttp
 import random
 import logging
@@ -18,7 +19,7 @@ async def fetch_free_proxies():
                 async with session.get(url, timeout=10) as resp:
                     if resp.status == 200:
                         text = await resp.text()
-                        lines = text.strip().split('\n')[:30] # Get top 30
+                        lines = text.strip().split('\n')[:50] # Top 50
                         for line in lines:
                             if ":" in line: proxies.append(line.strip())
             except Exception as e:
@@ -26,14 +27,13 @@ async def fetch_free_proxies():
     return proxies
 
 async def check_proxy(proxy_str):
-    """Checks if a SOCKS5 proxy is alive."""
+    """Real internet check (ipify API)"""
     try:
         proxy_url = f"socks5://{proxy_str}"
-        # Simple connection test (Pyrogram uses this)
-        reader, writer = await asyncio.wait_for(asyncio.open_connection(host=proxy_str.split(":")[0], port=int(proxy_str.split(":")[1])), timeout=3)
-        writer.close()
-        await writer.wait_closed()
-        return True
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://api.ipify.org?format=json", proxy=proxy_url, timeout=5) as resp:
+                if resp.status == 200:
+                    return True
     except Exception:
         pass
     return False
@@ -44,17 +44,13 @@ async def proxy_scanner_loop():
             d = db.load_data()
             custom_proxies = d.get("custom_proxies", [])
             
-            # Fetch free ones if less than 5 working
             if len(d.get("working_proxies", [])) < 5:
                 log.info("Fetching new free proxies...")
                 free_proxies = await fetch_free_proxies()
-                
-                # Combine free + custom
                 all_to_check = list(set(free_proxies + custom_proxies))
                 random.shuffle(all_to_check)
                 
                 working = []
-                # Check in batches of 10
                 for i in range(0, len(all_to_check), 10):
                     batch = all_to_check[i:i+10]
                     tasks = [check_proxy(p) for p in batch]
@@ -62,7 +58,7 @@ async def proxy_scanner_loop():
                     for p, is_working in zip(batch, results):
                         if is_working:
                             working.append(p)
-                            if len(working) >= 10: break # Get max 10 working
+                            if len(working) >= 10: break
                     if len(working) >= 10: break
                     
                 if working:
@@ -73,4 +69,4 @@ async def proxy_scanner_loop():
         except Exception as e:
             log.error(f"Proxy loop error: {e}")
             
-        await asyncio.sleep(300) # Every 5 mins
+        await asyncio.sleep(300)
