@@ -46,7 +46,7 @@ async def handle_force_join(app: Client, bot_username: str, msg):
 async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platform: str = "PayPal"):
     numbers = []
     try:
-        # 1. /start bhejo
+        # 1. Pehli baar /start bhejo
         await app.send_message(bot_username, "/start")
         await asyncio.sleep(4)
         
@@ -62,38 +62,40 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
         if latest_msg.reply_markup:
             is_force_join = await handle_force_join(app, bot_username, latest_msg)
         
-        # 🚨 3. Agar Force-Join complete ho gaya, toh direct text "GET NUMBER" bhejo
+        # 🚨 3. Agar Force-Join tha, toh dobara /start bhejo
         if is_force_join:
-            log.info("Force-Join complete. Sending 'GET NUMBER' directly as text...")
-            await app.send_message(bot_username, "GET NUMBER")
-            await asyncio.sleep(4) # Wait for bot to reply
+            log.info("Force-Join complete. Sending /start again to get main menu...")
+            await app.send_message(bot_username, "/start")
+            await asyncio.sleep(4)
             async for msg in app.get_chat_history(bot_username, limit=1):
                 latest_msg = msg
                 break
-        else:
-            # Agar normal start hua, toh button click karo
-            clicked_get_number = False
-            if latest_msg and latest_msg.reply_markup:
-                for row in latest_msg.reply_markup.inline_keyboard:
-                    for btn in row:
-                        if "GET NUMBER" in btn.text.upper() or "GET" in btn.text.upper():
-                            await latest_msg.click(btn.text)
-                            clicked_get_number = True
-                            log.info("Clicked GET NUMBER button.")
-                            break
-                    if clicked_get_number: break
-            
-            if not clicked_get_number:
-                log.warning("GET NUMBER button not found. Trying direct text...")
-                await app.send_message(bot_username, "GET NUMBER")
-                await asyncio.sleep(4)
-                async for msg in app.get_chat_history(bot_username, limit=1):
-                    latest_msg = msg
-                    break
+
+        # 4. Ab "GET NUMBER" button dhundho
+        clicked_get_number = False
+        if latest_msg and latest_msg.reply_markup:
+            for row in latest_msg.reply_markup.inline_keyboard:
+                for btn in row:
+                    if "GET NUMBER" in btn.text.upper() or "GET" in btn.text.upper():
+                        await latest_msg.click(btn.text)
+                        clicked_get_number = True
+                        log.info("Clicked GET NUMBER button.")
+                        break
+                if clicked_get_number: break
+        
+        # 🚨 5. Agar button nahi mila, toh direct text bhejo
+        if not clicked_get_number:
+            log.warning("GET NUMBER button not found. Sending text 'GET NUMBER'...")
+            await app.send_message(bot_username, "GET NUMBER")
+            await asyncio.sleep(4)
+            # Latest message ko check karo
+            async for msg in app.get_chat_history(bot_username, limit=1):
+                latest_msg = msg
+                break
 
         await asyncio.sleep(2)
         
-        # 4. Platform select karo
+        # 6. Platform select karo
         async for msg2 in app.get_chat_history(bot_username, limit=1):
             if msg2.reply_markup:
                 clicked_platform = False
@@ -112,7 +114,7 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
                 
                 await asyncio.sleep(3)
                 
-                # 5. Country select karo (India)
+                # 7. Country select karo (India)
                 async for msg3 in app.get_chat_history(bot_username, limit=1):
                     if msg3.reply_markup:
                         clicked_country = False
@@ -131,7 +133,7 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
                         
                         await asyncio.sleep(3)
                         
-                        # 6. Numbers extract karo
+                        # 8. Numbers extract karo
                         async for msg4 in app.get_chat_history(bot_username, limit=1):
                             if msg4.text:
                                 found = re.findall(r'\+?\d{10,12}', msg4.text)
@@ -139,7 +141,7 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
                                     numbers.extend(found)
                                     log.info(f"Found {len(found)} numbers.")
                                 else:
-                                    log.warning("No numbers found in text. Bot might be out of stock.")
+                                    log.warning(f"No numbers found in text. Bot might be out of stock. Bot replied: {msg4.text[:50]}")
     except Exception as e:
         log.error(f"Scraper Error: {e}")
         
