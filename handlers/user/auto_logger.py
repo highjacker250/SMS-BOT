@@ -25,7 +25,7 @@ async def start_auto_logger(cq: CallbackQuery, state: FSMContext):
         f"<b>Kaise kaam karega?</b>\n"
         f"1. Aap apna TG number denge.\n"
         f"2. AI OTP bhejega (aapko phone pe aayega).\n"
-        f"3. Aap OTP denge.\n"
+        f"3. Aap OTP turant denge.\n"
         f"4. Phir aap batayenge kaunsa platform (PayPal/FB) aur kitne accounts.\n\n"
         f"<b>Apna Telegram Number daalein (with +91):</b>"
     )
@@ -45,7 +45,7 @@ async def get_phone(msg: Message, state: FSMContext):
     if res["status"] == "success":
         await state.update_data(phone_hash=res["hash"])
         await state.set_state(S.user_auto_otp)
-        await status.edit_text("✅ OTP bhej diya gaya! Apna OTP daalein:")
+        await status.edit_text("✅ OTP bhej diya gaya! Apna OTP turant daalein:")
     else:
         await status.edit_text(f"❌ Failed: {res['reason']}")
         await state.clear()
@@ -56,6 +56,7 @@ async def get_otp(msg: Message, state: FSMContext):
     data = await state.get_data()
     status = await msg.answer("🔄 Verifying OTP...")
     
+    # 🚨 Pass phone_code_hash
     res = await complete_user_login(data['phone'], data['phone_hash'], otp)
     if res["status"] == "success":
         d = db.load_data()
@@ -116,7 +117,11 @@ async def select_target(cq: CallbackQuery, state: FSMContext):
 
 @user_auto_router.message(S.user_auto_limit)
 async def get_limit(msg: Message, state: FSMContext):
-    limit = int(msg.text.strip())
+    try:
+        limit = int(msg.text.strip())
+    except:
+        return await msg.answer("❌ Please enter a valid number.")
+        
     data = await state.get_data()
     await state.clear()
     
@@ -139,7 +144,6 @@ async def run_user_auto_hunter(bot, user_id, data, limit):
     success = 0
     for i in range(limit):
         try:
-            # 1. OTP Bot se numbers lo (Scraper se)
             numbers = await scrape_numbers_from_bot(app, bot_username, target)
             if not numbers:
                 await bot.send_message(user_id, f"⚠️ No numbers found from {bot_username}")
@@ -148,20 +152,16 @@ async def run_user_auto_hunter(bot, user_id, data, limit):
             for num in numbers:
                 await bot.send_message(user_id, f"📱 Trying: {num} on {target.upper()}")
                 
-                # 2. OTP wait karo (Scraper se)
                 otp = await wait_for_otp_from_bot(app, bot_username)
                 if not otp:
                     await bot.send_message(user_id, f"❌ OTP not received for {num}")
                     continue
                 
-                # 3. Real Browser me Login karo
                 if target.lower() == "paypal":
                     login_res = await login_paypal(num, otp)
                 else:
-                    # Filhaal baaki apps ke liye dummy response
                     login_res = {"status": "failed", "reason": "Platform not implemented yet."}
 
-                # 4. DB me save karo
                 d = db.load_data()
                 if "target_accounts" not in d: d["target_accounts"] = {}
                 d["target_accounts"][num] = {
@@ -183,10 +183,8 @@ async def run_user_auto_hunter(bot, user_id, data, limit):
         except Exception as e:
             await bot.send_message(user_id, f"❌ Error: {str(e)[:50]}")
     
-    # Final Report
     await bot.send_message(user_id, f"🎉 Hunter Finished! Total Success: {success}/{limit}")
     
-    # Mini Panel Link
     token = str(uuid.uuid4())
     d = db.load_data()
     if "mini_tokens" not in d: d["mini_tokens"] = {}
