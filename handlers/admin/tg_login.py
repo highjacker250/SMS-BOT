@@ -8,7 +8,7 @@ import config
 from utils.ui import sc, btn
 from utils.helper import is_owner
 from states import S
-from services.telegram_automation import auto_login_tg
+from services.telegram_automation import auto_login_manual  # 🚨 Naya function import
 
 admin_router = Router()
 
@@ -19,7 +19,7 @@ async def cmd_tg_login(msg: Message, state: FSMContext):
     await msg.answer(
         "📱 <b>Enter phone number with country code</b>\n"
         "Example: <code>+919876543210</code>\n\n"
-        "<i>AI will trigger login and wait for Email OTP.</i>", 
+        "<i>AI will trigger login and wait for SMS OTP.</i>", 
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "admin:home", "❌")]]),
         parse_mode="HTML"
     )
@@ -32,14 +32,14 @@ async def process_tg_login(msg: Message, state: FSMContext):
     if not phone.startswith("+"):
         return await msg.answer("❌ Number must start with + (e.g., +919876543210).")
     
-    status_msg = await msg.answer(f"🔄 <b>Starting AI Auto-Login for {phone}...</b>\nPlease wait, fetching Email OTP.", parse_mode="HTML")
+    status_msg = await msg.answer(f"🔄 <b>Starting AI Auto-Login for {phone}...</b>\nPlease wait, fetching SMS OTP.", parse_mode="HTML")
     
     d = db.load_data()
     d["telegram_accounts"][phone] = {"status": "logging_in", "reset_time": 0, "session": ""}
     db.save_data(d)
     
-    # 🚨 Yahan bot pass kiya gaya hai
-    res = await auto_login_tg(msg.bot, phone)
+    # 🚨 Naya function call
+    res = await auto_login_manual(msg.bot, phone)
     
     d = db.load_data()
     if res["status"] == "success":
@@ -49,7 +49,7 @@ async def process_tg_login(msg: Message, state: FSMContext):
             f"✅ <b>Login Successful!</b>\n\n"
             f"📞 Number: <code>{phone}</code>\n"
             f"🔑 Session saved to DB.\n"
-            f"🌐 Panel: <code>{config.WEB_URL}/panel</code>", 
+            f"🌐 Panel: <code>{config.WEB_URL}/</code>", 
             parse_mode="HTML"
         )
     else:
