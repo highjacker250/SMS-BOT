@@ -3,253 +3,100 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Dark OTP Bot — Telegram &amp; AI SaaS Manager</title>
+<title>Dark OTP Bot — AI SaaS Manager</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com" rel="preconnect"/>
-<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&amp;family=JetBrains+Mono:wght@300;400;600;700&amp;family=Orbitron:wght@500;700;900&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
-<script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
-            cyber: ['"Orbitron"', 'sans-serif'],
-            gothic: ['"Cinzel"', 'serif'],
-          }
-        }
-      }
-    }
-  </script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet"/>
 <style>
-    /* THEME SYSTEM VARIABLES */
-    :root, [data-theme="jjk"] {
-      --bg-base: #07040d; --bg-surface: #0e0919; --bg-card: rgba(23, 14, 41, 0.72); --bg-card-hover: rgba(35, 20, 64, 0.85);
-      --border-subtle: rgba(139, 92, 246, 0.22); --border-glow: rgba(56, 189, 248, 0.65);
-      --primary: #8b5cf6; --primary-glow: rgba(139, 92, 246, 0.45); --accent: #38bdf8; --accent-glow: rgba(56, 189, 248, 0.45);
-      --text-main: #f3f0ff; --text-muted: #9d8ec2; --theme-font: 'Plus Jakarta Sans', sans-serif;
-      --neon-shadow: 0 0 24px rgba(139, 92, 246, 0.35), 0 0 45px rgba(56, 189, 248, 0.2);
-      --hud-grid: rgba(139, 92, 246, 0.04); --badge-bg: rgba(56, 189, 248, 0.15); --badge-text: #38bdf8;
-    }
-    [data-theme="deathnote"] {
-      --bg-base: #050203; --bg-surface: #0d0407; --bg-card: rgba(26, 6, 12, 0.75); --bg-card-hover: rgba(43, 10, 20, 0.9);
-      --border-subtle: rgba(225, 29, 72, 0.3); --border-glow: rgba(255, 69, 58, 0.85);
-      --primary: #e11d48; --primary-glow: rgba(225, 29, 72, 0.55); --accent: #ff453a; --accent-glow: rgba(255, 69, 58, 0.6);
-      --text-main: #fff1f2; --text-muted: #b97f8c; --theme-font: 'Cinzel', serif;
-      --neon-shadow: 0 0 25px rgba(225, 29, 72, 0.45), 0 0 50px rgba(0, 0, 0, 0.8);
-      --hud-grid: rgba(225, 29, 72, 0.05); --badge-bg: rgba(225, 29, 72, 0.2); --badge-text: #fda4af;
-    }
-    [data-theme="sololeveling"] {
-      --bg-base: #040810; --bg-surface: #09101f; --bg-card: rgba(10, 22, 44, 0.7); --bg-card-hover: rgba(14, 32, 66, 0.85);
-      --border-subtle: rgba(14, 165, 233, 0.28); --border-glow: rgba(6, 182, 212, 0.85);
-      --primary: #0284c7; --primary-glow: rgba(2, 132, 199, 0.5); --accent: #06b6d4; --accent-glow: rgba(6, 182, 212, 0.55);
-      --text-main: #f0f9ff; --text-muted: #7dd3fc; --theme-font: 'Orbitron', sans-serif;
-      --neon-shadow: 0 0 25px rgba(6, 182, 212, 0.4), 0 0 55px rgba(2, 132, 199, 0.25);
-      --hud-grid: rgba(6, 182, 212, 0.06); --badge-bg: rgba(6, 182, 212, 0.2); --badge-text: #38bdf8;
-    }
-    [data-theme="cyberpunk"] {
-      --bg-base: #07070b; --bg-surface: #101018; --bg-card: rgba(24, 20, 36, 0.78); --bg-card-hover: rgba(36, 28, 54, 0.9);
-      --border-subtle: rgba(245, 158, 11, 0.35); --border-glow: rgba(236, 72, 153, 0.85);
-      --primary: #eab308; --primary-glow: rgba(234, 179, 8, 0.55); --accent: #ec4899; --accent-glow: rgba(236, 72, 153, 0.6);
-      --text-main: #fef08a; --text-muted: #f472b6; --theme-font: 'Orbitron', sans-serif;
-      --neon-shadow: 0 0 25px rgba(234, 179, 8, 0.45), 0 0 45px rgba(236, 72, 153, 0.35);
-      --hud-grid: rgba(234, 179, 8, 0.06); --badge-bg: rgba(234, 179, 8, 0.2); --badge-text: #fef08a;
-    }
-    [data-theme="glass"] {
-      --bg-base: #0f172a; --bg-surface: #1e293b; --bg-card: rgba(255, 255, 255, 0.08); --bg-card-hover: rgba(255, 255, 255, 0.14);
-      --border-subtle: rgba(255, 255, 255, 0.18); --border-glow: rgba(255, 255, 255, 0.6);
-      --primary: #38bdf8; --primary-glow: rgba(56, 189, 248, 0.4); --accent: #a78bfa; --accent-glow: rgba(167, 139, 250, 0.4);
-      --text-main: #ffffff; --text-muted: #cbd5e1; --theme-font: 'Plus Jakarta Sans', sans-serif;
-      --neon-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); --hud-grid: rgba(255, 255, 255, 0.03); --badge-bg: rgba(255, 255, 255, 0.15); --badge-text: #ffffff;
-    }
-
-    * { transition: background-color 0.4s ease, border-color 0.4s ease, color 0.3s ease; }
-    body {
-      background-color: var(--bg-base); color: var(--text-main); font-family: var(--theme-font);
-      background-image: radial-gradient(circle at 15% 15%, var(--primary-glow) 0%, transparent 40%),
-        radial-gradient(circle at 85% 85%, var(--accent-glow) 0%, transparent 40%),
-        linear-gradient(to right, var(--hud-grid) 1px, transparent 1px), linear-gradient(to bottom, var(--hud-grid) 1px, transparent 1px);
-      background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
-    }
+    :root, [data-theme="jjk"] { --bg-base: #07040d; --bg-surface: #0e0919; --bg-card: rgba(23, 14, 41, 0.72); --border-subtle: rgba(139, 92, 246, 0.22); --primary: #8b5cf6; --accent: #38bdf8; --text-main: #f3f0ff; --text-muted: #9d8ec2; }
+    body { background-color: var(--bg-base); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; background-image: radial-gradient(circle at 15% 15%, rgba(139,92,246,0.15) 0%, transparent 40%), radial-gradient(circle at 85% 85%, rgba(56,189,248,0.15) 0%, transparent 40%); }
     .theme-card { background-color: var(--bg-card); border: 1px solid var(--border-subtle); backdrop-filter: blur(16px); }
-    .theme-card:hover { background-color: var(--bg-card-hover); border-color: var(--border-glow); box-shadow: var(--neon-shadow); }
-    .primary-gradient-text { background: linear-gradient(135deg, var(--text-main) 20%, var(--accent) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    @keyframes graph-dash { to { stroke-dashoffset: 0; } }
-    .animate-graph-line { stroke-dasharray: 1000; stroke-dashoffset: 1000; animation: graph-dash 2.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
-  </style>
+    .theme-card:hover { border-color: var(--accent); }
+</style>
 </head>
-<body class="min-h-screen flex flex-col overflow-hidden selection:bg-purple-600 selection:text-white">
+<body class="min-h-screen flex flex-col overflow-hidden">
 
-<!-- TOP HUD NAVIGATION BAR -->
-<header class="h-16 w-full border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 backdrop-blur-xl flex items-center justify-between px-5 z-40 shrink-0">
-<div class="flex items-center space-x-4">
-<div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 via-indigo-600 to-sky-400 p-[1.5px]">
-<div class="w-full h-full bg-[var(--bg-base)] rounded-[10px] flex items-center justify-center">
-<svg class="w-5 h-5 text-[var(--accent)] animate-pulse" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path></svg>
-</div>
-</div>
-<div>
-<div class="flex items-center space-x-2">
-<span class="font-cyber font-black tracking-wider text-base md:text-lg primary-gradient-text uppercase">DARK OTP BOT</span>
-</div>
-<p class="text-[11px] text-[var(--text-muted)] tracking-wide font-mono hidden sm:block">AI TELEGRAM CLUSTER</p>
-</div>
-</div>
-
-<!-- Right Controls -->
-<div class="flex items-center space-x-3">
-<div class="flex items-center p-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-card)]">
-<div class="flex items-center space-x-1" id="theme-button-group">
-<button class="px-2.5 py-1 text-xs font-bold rounded-lg bg-[var(--primary)] text-white" data-theme-btn="jjk" onclick="setTheme('jjk')">JJK</button>
-<button class="px-2.5 py-1 text-xs font-bold rounded-lg text-[var(--text-muted)]" data-theme-btn="deathnote" onclick="setTheme('deathnote')">DN</button>
-<button class="px-2.5 py-1 text-xs font-bold rounded-lg text-[var(--text-muted)]" data-theme-btn="sololeveling" onclick="setTheme('sololeveling')">SL</button>
-</div>
-</div>
-<div class="flex items-center space-x-3 pl-2 border-l border-[var(--border-subtle)]">
-<div class="text-right hidden md:block">
-<div class="text-xs font-bold text-[var(--text-main)] font-mono">SHADOW_ROOT</div>
-<div class="text-[10px] text-[var(--text-muted)] font-mono">OWNER</div>
-</div>
-</div>
-</div>
+<header class="h-16 w-full border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 backdrop-blur-xl flex items-center justify-between px-5">
+    <span class="font-bold text-lg" style="color: var(--accent);">DARK OTP BOT</span>
+    <a href="/telegram" class="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-xs font-bold">Open Telegram UI</a>
 </header>
 
-<!-- BODY: SIDEBAR + MAIN -->
-<div class="flex flex-1 overflow-hidden">
-<!-- SIDEBAR -->
-<aside class="w-64 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)]/75 backdrop-blur-xl flex flex-col p-4 shrink-0">
-<nav class="space-y-1.5 font-mono text-xs">
-<a class="flex items-center px-3.5 py-2.5 rounded-xl border border-[var(--border-glow)] bg-[var(--bg-card-hover)] text-[var(--text-main)] font-bold" href="#" id="nav-dashboard" onclick="switchTab('dashboard')"><span>Dashboard</span></a>
-<a class="flex items-center px-3.5 py-2.5 rounded-xl border border-transparent hover:bg-[var(--bg-card)] text-[var(--text-muted)]" href="#" id="nav-apps" onclick="switchTab('apps')"><span>AI Apps Cluster</span></a>
-<a class="flex items-center px-3.5 py-2.5 rounded-xl border border-transparent hover:bg-[var(--bg-card)] text-[var(--text-muted)]" href="#" id="nav-owner" onclick="switchTab('owner')"><span>Owner Cabin</span></a>
-<a class="flex items-center px-3.5 py-2.5 rounded-xl border border-transparent hover:bg-[var(--bg-card)] text-[var(--text-muted)]" href="#" id="nav-health" onclick="switchTab('health')"><span>Server Health</span></a>
-<!-- 🚨 LINK TO TELEGRAM UI -->
-<a class="flex items-center justify-between px-3.5 py-2.5 mt-2 rounded-xl border border-[var(--accent)]/50 bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20 transition" href="/telegram"><span>Open Telegram UI</span> <i class="fa-solid fa-arrow-right"></i></a>
-</nav>
-</aside>
+<main class="flex-1 overflow-y-auto p-6 space-y-6">
 
-<!-- MAIN CONTENT AREA -->
-<main class="flex-1 overflow-y-auto p-6 space-y-6 relative" id="main-content-scroll">
+    <!-- Hunting Control -->
+    <div class="theme-card rounded-2xl p-6 flex items-center justify-between">
+        <div>
+            <h2 class="text-xl font-bold" style="color: var(--accent);">AI GHATAK HUNTER</h2>
+            <p class="text-xs text-gray-400 mt-1" id="hunting-status">Loading status...</p>
+        </div>
+        <button id="hunting-btn" onclick="toggleHunting()" class="px-8 py-3 rounded-xl font-bold text-white bg-red-600 text-lg">CHECKING...</button>
+    </div>
 
-<!-- VIEW: DASHBOARD -->
-<div class="space-y-6" id="view-dashboard">
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-<!-- Stat 1 -->
-<div class="theme-card rounded-2xl p-5">
-<span class="text-xs font-mono text-[var(--text-muted)] uppercase">Live OTP Requests</span>
-<div class="text-3xl font-cyber font-black text-[var(--text-main)] mt-2">1,842</div>
-</div>
-<!-- Stat 2 (Real Data) -->
-<div class="theme-card rounded-2xl p-5">
-<span class="text-xs font-mono text-[var(--text-muted)] uppercase">Active TG Accounts</span>
-<div class="text-3xl font-cyber font-black text-[var(--text-main)] mt-2" id="real-accounts-count">0</div>
-</div>
-<!-- Stat 3 -->
-<div class="theme-card rounded-2xl p-5">
-<span class="text-xs font-mono text-[var(--text-muted)] uppercase">AI Health</span>
-<div class="text-3xl font-cyber font-black text-emerald-400 mt-2">99.8%</div>
-</div>
-<!-- Stat 4 -->
-<div class="theme-card rounded-2xl p-5">
-<span class="text-xs font-mono text-[var(--text-muted)] uppercase">Server Load</span>
-<div class="text-3xl font-cyber font-black text-[var(--text-main)] mt-2">38.4%</div>
-</div>
-</div>
+    <!-- Stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="theme-card rounded-2xl p-5">
+            <span class="text-xs text-gray-400 uppercase">Active Accounts</span>
+            <div class="text-3xl font-black mt-2" id="accounts-count">0</div>
+        </div>
+        <div class="theme-card rounded-2xl p-5">
+            <span class="text-xs text-gray-400 uppercase">Working Proxies</span>
+            <div class="text-3xl font-black mt-2" id="proxies-count">0</div>
+        </div>
+    </div>
 
-<!-- Graph -->
-<div class="theme-card rounded-2xl p-6 h-80 flex flex-col justify-between">
-<h3 class="font-cyber font-bold text-lg primary-gradient-text uppercase">AI Activities</h3>
-<div class="w-full h-full relative mt-4">
-<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 900 260">
-<path class="animate-graph-line" d="M 0 190 Q 75 120 150 140 T 300 70 T 450 110 T 600 40 T 750 90 T 900 30" fill="none" stroke="var(--accent)" stroke-width="3"></path>
-</svg>
-</div>
-</div>
-</div>
-
-<!-- VIEW: AI APPS -->
-<div class="hidden space-y-6" id="view-apps">
-<h2 class="font-cyber font-bold text-xl primary-gradient-text uppercase">LOGGED-IN APP CLUSTER</h2>
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-<div class="theme-card rounded-2xl p-5 space-y-4">
-<h4 class="font-bold text-sm text-[var(--text-main)]">Telegram Multi-Session</h4>
-<div class="text-xs font-mono text-[var(--text-muted)] flex justify-between"><span>Active Accounts:</span><span class="text-[var(--text-main)] font-bold" id="apps-real-accounts">0</span></div>
-<a href="/telegram" class="block text-center w-full py-2 rounded-lg bg-[var(--primary)] text-white text-xs font-bold mt-4">Manage</a>
-</div>
-<div class="theme-card rounded-2xl p-5 space-y-4 opacity-50">
-<h4 class="font-bold text-sm text-[var(--text-main)]">WhatsApp Relay</h4>
-<div class="text-xs font-mono text-[var(--text-muted)] flex justify-between"><span>Active Accounts:</span><span class="text-[var(--text-main)] font-bold">16</span></div>
-</div>
-</div>
-</div>
-
-<!-- VIEW: OWNER CABIN -->
-<div class="hidden space-y-6" id="view-owner">
-<div class="p-6 rounded-2xl border border-red-500/40 bg-red-950/20">
-<h2 class="font-cyber font-bold text-lg text-red-400">OWNER CABIN</h2>
-</div>
-</div>
-
-<!-- VIEW: HEALTH -->
-<div class="hidden space-y-6" id="view-health">
-<div class="theme-card rounded-2xl p-6">
-<h2 class="font-cyber font-bold text-lg text-emerald-400">SYSTEM HEALTH MONITOR</h2>
-</div>
-</div>
+    <!-- Live Status -->
+    <div class="theme-card rounded-2xl p-6">
+        <h3 class="text-sm font-bold mb-3" style="color: var(--accent);">AI LIVE ACTIVITY</h3>
+        <p class="text-xs font-mono" id="live-detail">Waiting for data...</p>
+    </div>
 
 </main>
-</div>
 
 <script>
-    // THEME SWITCHER
-    function setTheme(themeKey) {
-      document.documentElement.setAttribute('data-theme', themeKey);
-      document.querySelectorAll('[data-theme-btn]').forEach(btn => {
-        if (btn.getAttribute('data-theme-btn') === themeKey) {
-          btn.className = "px-2.5 py-1 text-xs font-bold rounded-lg bg-[var(--primary)] text-white";
-        } else {
-          btn.className = "px-2.5 py-1 text-xs font-bold rounded-lg text-[var(--text-muted)]";
-        }
-      });
-    }
+    let huntingState = false;
 
-    // TAB SWITCHER
-    function switchTab(tabId) {
-      ['dashboard', 'apps', 'owner', 'health'].forEach(v => {
-        const el = document.getElementById(`view-${v}`);
-        if (v === tabId) el.classList.remove('hidden');
-        else el.classList.add('hidden');
-      });
-      ['dashboard', 'apps', 'owner', 'health'].forEach(n => {
-        const btn = document.getElementById(`nav-${n}`);
-        if (n === tabId) btn.className = "flex items-center px-3.5 py-2.5 rounded-xl border border-[var(--border-glow)] bg-[var(--bg-card-hover)] text-[var(--text-main)] font-bold";
-        else btn.className = "flex items-center px-3.5 py-2.5 rounded-xl border border-transparent hover:bg-[var(--bg-card)] text-[var(--text-muted)]";
-      });
-    }
-
-    // 🚨 REAL DATA FETCHING
-    async function fetchRealData() {
+    async function fetchHuntingState() {
         try {
-            const response = await fetch('/api/get_accounts');
-            const data = await response.json();
-            
-            if (data.status === 'success') {
-                const count = data.accounts.length;
-                document.getElementById('real-accounts-count').textContent = count;
-                document.getElementById('apps-real-accounts').textContent = count + " Profiles";
+            const res = await fetch('/api/hunting_status');
+            const data = await res.json();
+            huntingState = data.enabled;
+            const btn = document.getElementById('hunting-btn');
+            const status = document.getElementById('hunting-status');
+            if (huntingState) {
+                btn.textContent = 'HUNTING ON';
+                btn.className = 'px-8 py-3 rounded-xl font-bold text-white bg-green-600 text-lg';
+                status.textContent = '✅ AI is hunting all devices non-stop!';
+            } else {
+                btn.textContent = 'HUNTING OFF';
+                btn.className = 'px-8 py-3 rounded-xl font-bold text-white bg-red-600 text-lg';
+                status.textContent = '⏸ AI is sleeping. Turn ON to start.';
             }
-        } catch (e) {
-            console.error("Failed to fetch real accounts", e);
-        }
+        } catch (e) { console.error(e); }
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
-        fetchRealData();
-        setInterval(fetchRealData, 30000); // Refresh every 30s
+    async function toggleHunting() {
+        await fetch('/api/toggle_hunting', { method: 'POST' });
+        fetchHuntingState();
+    }
+
+    async function fetchData() {
+        try {
+            const accountsRes = await fetch('/api/get_accounts');
+            const accountsData = await accountsRes.json();
+            if (accountsData.status === 'success') {
+                document.getElementById('accounts-count').textContent = accountsData.accounts.length;
+            }
+
+            const healthRes = await fetch('/api/health');
+            const healthData = await healthRes.json();
+            document.getElementById('proxies-count').textContent = healthData.working_proxies;
+            document.getElementById('live-detail').textContent = `${healthData.task} — ${healthData.detail}`;
+        } catch (e) { console.error(e); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchHuntingState();
+        fetchData();
+        setInterval(fetchData, 5000);
     });
 </script>
 </body>
