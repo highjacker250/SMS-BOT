@@ -19,18 +19,32 @@ user_auto_router = Router()
 @user_auto_router.callback_query(F.data == "user:auto_logger")
 async def start_auto_logger(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
-    text = (
-        f"🤖 <b>{sc('ai auto logger')}</b>\n\n"
-        f"Bhai, ye AI aapke Telegram account se kaam karega.\n\n"
-        f"<b>Kaise kaam karega?</b>\n"
-        f"1. Aap apna TG number denge.\n"
-        f"2. AI OTP bhejega (aapko phone pe aayega).\n"
-        f"3. Aap OTP turant denge.\n"
-        f"4. Phir aap batayenge kaunsa platform (PayPal/FB) aur kitne accounts.\n\n"
-        f"<b>Apna Telegram Number daalein (with +91):</b>"
-    )
-    await state.set_state(S.user_auto_phone)
-    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:main_menu", "❌")]]), parse_mode="HTML")
+    uid = cq.from_user.id
+    d = db.load_data()
+    
+    # 🚨 Check if user has saved sessions
+    user_data = d.get("users", {}).get(str(uid), {})
+    saved_session = user_data.get("auto_session")
+    
+    if saved_session:
+        # Agar pehle se session hai, toh direct poochho
+        await state.update_data(phone=user_data.get("auto_phone", "Saved Number"))
+        await state.update_data(session=user_data.get("auto_session"))
+        await ask_bot_username(cq.message, state)
+    else:
+        # Naya account add karo
+        text = (
+            f"🤖 <b>{sc('ai auto logger')}</b>\n\n"
+            f"Bhai, ye AI aapke Telegram account se kaam karega.\n\n"
+            f"<b>Kaise kaam karega?</b>\n"
+            f"1. Aap apna TG number denge.\n"
+            f"2. AI OTP bhejega (aapko phone pe aayega).\n"
+            f"3. Aap OTP turant denge.\n"
+            f"4. Phir aap batayenge kaunsa platform (PayPal/FB) aur kitne accounts.\n\n"
+            f"<b>Apna Telegram Number daalein (with +91):</b>"
+        )
+        await state.set_state(S.user_auto_phone)
+        await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("cancel", "user:main_menu", "❌")]]), parse_mode="HTML")
 
 @user_auto_router.message(S.user_auto_phone)
 async def get_phone(msg: Message, state: FSMContext):
@@ -56,16 +70,18 @@ async def get_otp(msg: Message, state: FSMContext):
     data = await state.get_data()
     status = await msg.answer("🔄 Verifying OTP...")
     
-    # 🚨 Pass phone_code_hash
     res = await complete_user_login(data['phone'], data['phone_hash'], otp)
     if res["status"] == "success":
         d = db.load_data()
         uid = msg.from_user.id
-        d["users"].setdefault(str(uid), {})["auto_session"] = res["session"]
+        # 🚨 Save Session and Phone to DB
+        user = d["users"].setdefault(str(uid), {})
+        user["auto_session"] = res["session"]
+        user["auto_phone"] = data['phone']
         db.save_data(d)
         
-        await state.set_state(S.user_auto_bot_username)
-        await status.edit_text("✅ Account Connected!\n\nAb aap batayein kaunsa OTP bot use karna hai?\nJaise: <code>@Smartotpworkbot</code>")
+        await state.update_data(session=res["session"])
+        await ask_bot_username(status, state)
     elif "2FA" in res["reason"]:
         await state.set_state(S.user_auto_2fa)
         await status.edit_text("🔐 2FA Password daalein:")
@@ -83,14 +99,25 @@ async def get_2fa(msg: Message, state: FSMContext):
     if res["status"] == "success":
         d = db.load_data()
         uid = msg.from_user.id
-        d["users"].setdefault(str(uid), {})["auto_session"] = res["session"]
+        user = d["users"].setdefault(str(uid), {})
+        user["auto_session"] = res["session"]
+        user["auto_phone"] = data['phone']
         db.save_data(d)
         
-        await state.set_state(S.user_auto_bot_username)
-        await status.edit_text("✅ 2FA Verified! Ab OTP bot ka username daalein (e.g., @Smartotpworkbot):")
+        await state.update_data(session=res["session"])
+        await ask_bot_username(status, state)
     else:
         await status.edit_text(f"❌ 2FA Failed: {res['reason']}")
         await state.clear()
+
+# 🚨 Helper function to ask bot username (Used in both new and saved flows)
+async def ask_bot_username(target_msg, state: FSMContext):
+    await state.set_state(S.user_auto_bot_username)
+    await target_msg.edit_text(
+        "✅ Account Connected!\n\n"
+        "Ab aap batayein kaunsa OTP bot use karna hai?\n"
+        "Jaise: <code>@Smartotpworkbot</code>"
+    )
 
 @user_auto_router.message(S.user_auto_bot_username)
 async def get_bot_username(msg: Message, state: FSMContext):
@@ -123,22 +150,23 @@ async def get_limit(msg: Message, state: FSMContext):
         return await msg.answer("❌ Please enter a valid number.")
         
     data = await state.get_data()
+    
+    # 🚨 Clear state but keep data in local variables
     await state.clear()
+    session = data.get('session')
+    phone = data.get('phone', 'Saved')
+    bot_username = data.get('bot_username')
+    target = data.get('target')
     
     await msg.answer(f"🚀 AI Hunter Started! {limit} accounts target kiye gaye hain. Live updates aayenge.")
-    asyncio.create_task(run_user_auto_hunter(msg.bot, msg.from_user.id, data, limit))
+    asyncio.create_task(run_user_auto_hunter(msg.bot, msg.from_user.id, phone, session, bot_username, target, limit))
 
 
 # ==========================================
 # 🚨 REAL HUNTER LOGIC (Playwright ke saath)
 # ==========================================
-async def run_user_auto_hunter(bot, user_id, data, limit):
-    phone = data['phone']
-    session = db.load_data()["users"][str(user_id)]["auto_session"]
-    bot_username = data['bot_username']
-    target = data['target']
-    
-    app = Client(f"user_{phone.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, session_string=session)
+async def run_user_auto_hunter(bot, user_id, phone, session, bot_username, target, limit):
+    app = Client(f"user_{user_id}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, session_string=session)
     await app.start()
     
     success = 0
