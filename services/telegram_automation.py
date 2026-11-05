@@ -13,7 +13,7 @@ import firebase_utils as fbu
 
 log = logging.getLogger("TGAuto")
 
-# 🚨 Temporary storage for active user logins
+# 🚨 Dictionary to hold active clients during User Login flow
 USER_LOGIN_CLIENTS = {}
 
 async def update_owner_progress(bot, text):
@@ -229,16 +229,15 @@ async def reset_watchdog_loop(bot):
             log.error(f"Watchdog Error: {e}")
             await asyncio.sleep(3600)
 
-# 🚨 6. User Login Initiate (FIXED: Client ko store karta hai)
+# 🚨 6. User Login Initiate (FIXED)
 async def initiate_user_login(phone_number):
     app = None
     try:
-        # Naya client banao
         app = Client(f"temp_user_{phone_number.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, phone_number=phone_number, in_memory=True)
         await app.connect()
         sent_code = await app.send_code(phone_number)
         
-        # Store the client for later use
+        # 🚨 Save the active client, DO NOT disconnect
         USER_LOGIN_CLIENTS[phone_number] = app
         
         return {"status": "success", "hash": sent_code.phone_code_hash}
@@ -246,23 +245,22 @@ async def initiate_user_login(phone_number):
         if app and app.is_connected: await app.disconnect()
         return {"status": "failed", "reason": str(e)}
 
-# 🚨 7. User Login Complete (FIXED: Stored client use karta hai)
+# 🚨 7. User Login Complete (FIXED)
 async def complete_user_login(phone_number, phone_code_hash, otp=None, password=None):
     app = USER_LOGIN_CLIENTS.get(phone_number)
     if not app:
-        return {"status": "failed", "reason": "No active session. Please restart."}
+        return {"status": "failed", "reason": "Session expired or not found. Please restart."}
 
     try:
         if otp:
             try:
                 await app.sign_in(phone_number, phone_code_hash, otp)
             except SessionPasswordNeeded:
-                # Don't disconnect, keep for password
                 return {"status": "failed", "reason": "2FA Password required"}
             except PhoneCodeExpired:
-                if app.is_connected: await app.disconnect()
+                await app.disconnect()
                 del USER_LOGIN_CLIENTS[phone_number]
-                return {"status": "failed", "reason": "OTP Expired. Please try again."}
+                return {"status": "failed", "reason": "OTP Expired. Please restart."}
         elif password:
             await app.check_password(password)
             
