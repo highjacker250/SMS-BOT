@@ -18,7 +18,7 @@ import config
 
 # Tere bot ke modules
 from core.scanner import start_scanner, backup_scanner, whatsapp_scanner
-from services.telegram_automation import reset_watchdog_loop
+from services.telegram_automation import reset_watchdog_loop, auto_hunter_loop
 from services.proxy_manager import proxy_scanner_loop
 from handlers.user import user_router
 from handlers.admin import admin_router
@@ -53,7 +53,11 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(start_scanner(bot))
     asyncio.create_task(backup_scanner(bot))
     asyncio.create_task(whatsapp_scanner(bot))
-    asyncio.create_task(reset_watchdog_loop())
+    
+    # 🚨 Naye tasks jisme bot pass ho raha hai
+    asyncio.create_task(reset_watchdog_loop(bot)) 
+    asyncio.create_task(auto_hunter_loop(bot))
+    
     asyncio.create_task(proxy_scanner_loop())
     asyncio.create_task(self_ping())
     yield
@@ -62,7 +66,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# 🚨 FIXED ROUTE 1: Main Dashboard (Direct file read, no Jinja2 conflict)
+# 🚨 FIXED ROUTE 1: Main Dashboard (Direct file read)
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():
     try:
@@ -72,7 +76,7 @@ async def serve_dashboard():
         log.error(f"Dashboard HTML error: {e}")
         return HTMLResponse(content="<h1>Error loading Dashboard. Check logs.</h1>", status_code=500)
 
-# 🚨 FIXED ROUTE 2: Telegram UI (Direct file read, no Jinja2 conflict)
+# 🚨 FIXED ROUTE 2: Telegram UI (Direct file read)
 @app.get("/telegram", response_class=HTMLResponse)
 async def serve_telegram():
     try:
