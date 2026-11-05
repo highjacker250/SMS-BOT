@@ -8,7 +8,7 @@ import config
 from utils.ui import sc, btn
 from utils.helper import is_owner
 from states import S
-from services.telegram_automation import auto_login_manual  # 🚨 Naya function import
+from services.telegram_automation import auto_login_manual # 🚨 Naya import
 
 admin_router = Router()
 
