@@ -1,3 +1,4 @@
+# database.py
 import logging
 import time
 from supabase import create_client, Client
@@ -31,13 +32,25 @@ def load_data():
             if res.data and len(res.data) > 0 and res.data[0]["data"]:
                 data = res.data[0]["data"]
                 data["owner_id"] = config.MAIN_OWNER
-                for k in ["vip_users", "custom_countries"]:
+                for k in ["vip_users", "custom_countries", "mini_tokens"]:
                     if k not in data: data[k] = []
-                for k in ["device_backups", "upcoming_timers", "whatsapp_ready_lines", "telegram_accounts"]:
+                for k in ["device_backups", "upcoming_timers", "whatsapp_ready_lines", "telegram_accounts", "target_accounts"]:
                     if k not in data: data[k] = {}
                 if "hunting_enabled" not in data: data["hunting_enabled"] = True
                 if "custom_proxies" not in data: data["custom_proxies"] = []
                 if "working_proxies" not in data: data["working_proxies"] = []
+                
+                # 🚨 FIX: Purane users me 'auto_sessions' nahi hai, usko migrate karo
+                for uid, user in data.get("users", {}).items():
+                    if "auto_session" in user and user["auto_session"]:
+                        if "auto_sessions" not in user:
+                            user["auto_sessions"] = {}
+                        phone = user.get("auto_phone", "Unknown_Phone")
+                        user["auto_sessions"][phone] = user["auto_session"]
+                        del user["auto_session"] # Purana hatao
+                    if "auto_sessions" not in user:
+                        user["auto_sessions"] = {}
+
                 _DATA_CACHE = data
                 return _DATA_CACHE
         except Exception as e: 
@@ -49,8 +62,9 @@ def load_data():
         "free_mode": True, "users": {}, "firebases": [], "user_leases": {}, 
         "used_devices": {}, "extra_tokens": [], "stats": {"total_otps": 0}, 
         "vip_users": [], "device_backups": {}, "custom_countries": [], "upcoming_timers": {},
-        "whatsapp_ready_lines": {}, "telegram_accounts": {},
-        "hunting_enabled": True, "custom_proxies": [], "working_proxies": []
+        "whatsapp_ready_lines": {}, "telegram_accounts": {}, "target_accounts": {},
+        "hunting_enabled": True, "custom_proxies": [], "working_proxies": [],
+        "mini_tokens": {}
     }
     return _DATA_CACHE
 
