@@ -1,4 +1,3 @@
-# handlers/user/menu.py
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
@@ -17,7 +16,8 @@ def main_kb(uid):
     kb = [
         [btn("get number", "user:get_num", "📱"), btn("my numbers", "user:saved", "⭐")],
         [btn("otp history", "user:history", "📜"), btn("help/support", "user:support", "🆘")],
-        [btn("new ai auto logger", "user:auto_logger", "🤖")] # 🚨 Naya Button
+        [btn("new ai auto logger", "user:auto_logger", "🤖")],
+        [btn("account login", "user:acc_login", "🔐")] # 🚨 Naya Button
     ]
     if is_vip:
         kb.append([btn("upcoming ws otps", "user:upcoming", "📅")])
