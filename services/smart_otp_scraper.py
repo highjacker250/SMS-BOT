@@ -138,32 +138,36 @@ async def select_country_and_get_numbers(app: Client, bot_username: str, country
 
         log.info(f"Country '{country_original_text}' selected. Waiting for numbers...")
         
-        # 🚨 1. WAIT FOR NUMBERS (Scan Text & Buttons)
         numbers = []
         for i in range(6):
             await asyncio.sleep(2.5)
             async for msg in app.get_chat_history(bot_username, limit=2):
-                # A. Check Text
+                # 1. Check Message Text
                 if msg.text:
                     found = re.findall(r'\+?\d{10,12}', msg.text)
                     if found: numbers.extend(found)
                 
-                # B. Check Buttons (Tere screenshot me buttons me numbers the)
+                # 2. Check Inline Buttons & Copyable Floating Buttons
                 if msg.reply_markup:
                     for row in msg.reply_markup.inline_keyboard:
                         for btn in row:
+                            # Check Button Text
                             found_btn = re.findall(r'\+?\d{10,12}', btn.text)
                             if found_btn: numbers.extend(found_btn)
+                            
+                            # Check Floating Copy Text (Important for your issue)
+                            if hasattr(btn, 'copy_text') and btn.copy_text:
+                                found_copy = re.findall(r'\+?\d{10,12}', btn.copy_text.text)
+                                if found_copy: numbers.extend(found_copy)
             
             if numbers:
-                # Remove duplicates
                 numbers = list(set(numbers))
                 log.info(f"Found {len(numbers)} numbers after {i+1} attempts.")
                 return numbers
                 
             log.warning(f"Waiting for numbers... (Attempt {i+1})")
         
-        # 🚨 2. NO NUMBERS FOUND? CLICK REFRESH!
+        # 3. No numbers found? Click REFRESH!
         log.warning("No numbers found. Trying to click REFRESH button...")
         refreshed = False
         async for msg in app.get_chat_history(bot_username, limit=2):
@@ -180,7 +184,7 @@ async def select_country_and_get_numbers(app: Client, bot_username: str, country
         if refreshed:
             log.info("Clicked REFRESH. Waiting for new numbers...")
             await asyncio.sleep(4)
-            # Ek baar fir scan karo
+            # Re-scan after refresh
             async for msg in app.get_chat_history(bot_username, limit=2):
                 if msg.text:
                     found = re.findall(r'\+?\d{10,12}', msg.text)
@@ -190,6 +194,9 @@ async def select_country_and_get_numbers(app: Client, bot_username: str, country
                         for btn in row:
                             found_btn = re.findall(r'\+?\d{10,12}', btn.text)
                             if found_btn: numbers.extend(found_btn)
+                            if hasattr(btn, 'copy_text') and btn.copy_text:
+                                found_copy = re.findall(r'\+?\d{10,12}', btn.copy_text.text)
+                                if found_copy: numbers.extend(found_copy)
             numbers = list(set(numbers))
             if numbers:
                 log.info(f"Found {len(numbers)} numbers after REFRESH.")
