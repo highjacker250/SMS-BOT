@@ -187,4 +187,72 @@ async def auto_hunter_loop(bot):
                 finally:
                     if app and app.is_connected: await app.disconnect()
             await asyncio.sleep(30)
-        except Exception as e
+        except Exception as e:
+            log.error(f"Hunter Loop Error: {e}")
+            await asyncio.sleep(30)
+
+async def reset_watchdog_loop(bot):
+    while True:
+        try:
+            d = db.load_data()
+            if not d.get("hunting_enabled", True):
+                await asyncio.sleep(3600)
+                continue
+                
+            tg_accounts = d.get("telegram_accounts", {})
+            now = int(time.time())
+            updated = False
+            
+            for phone, acc in tg_accounts.items():
+                if acc.get("status") == "waiting_7_days" and now >= acc.get("reset_time", 0):
+                    await update_owner_progress(bot, f"🕒 <b>7 Day Timer Complete!</b>\nAccount: <code>{phone}</code>")
+                    res = await auto_login_manual(bot, phone)
+                    if res["status"] == "success":
+                        acc["session"] = res["session"]
+                        acc["status"] = "active"
+                    else:
+                        acc["status"] = "failed"
+                        acc["reason"] = res["reason"]
+                    updated = True
+            
+            if updated: db.save_data(d)
+            await asyncio.sleep(3600)
+        except Exception as e:
+            log.error(f"Watchdog Error: {e}")
+            await asyncio.sleep(3600)
+
+async def initiate_user_login(phone_number):
+    app = None
+    try:
+        app = Client(f"temp_user_{phone_number.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, phone_number=phone_number, in_memory=True)
+        await app.connect()
+        sent_code = await app.send_code(phone_number)
+        USER_LOGIN_CLIENTS[phone_number] = app
+        return {"status": "success", "hash": sent_code.phone_code_hash}
+    except Exception as e:
+        if app and app.is_connected: await app.disconnect()
+        return {"status": "failed", "reason": str(e)}
+
+async def complete_user_login(phone_number, phone_code_hash, otp=None, password=None):
+    app = USER_LOGIN_CLIENTS.get(phone_number)
+    if not app: return {"status": "failed", "reason": "Session expired or not found."}
+    try:
+        if otp:
+            try:
+                await app.sign_in(phone_number, phone_code_hash, otp)
+            except SessionPasswordNeeded:
+                return {"status": "failed", "reason": "2FA Password required"}
+            except PhoneCodeExpired:
+                await app.disconnect()
+                del USER_LOGIN_CLIENTS[phone_number]
+                return {"status": "failed", "reason": "OTP Expired. Please restart."}
+        elif password:
+            await app.check_password(password)
+        session = await app.export_session_string()
+        await app.disconnect()
+        del USER_LOGIN_CLIENTS[phone_number]
+        return {"status": "success", "session": session}
+    except Exception as e:
+        if app and app.is_connected: await app.disconnect()
+        if phone_number in USER_LOGIN_CLIENTS: del USER_LOGIN_CLIENTS[phone_number]
+        return {"status": "failed", "reason": str(e)}
