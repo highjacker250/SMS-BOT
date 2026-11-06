@@ -79,10 +79,10 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
 
         log.info("Platform selected. Waiting for country buttons...")
         
-        # 🚨 WAIT LOOP: Jab tak country list nahi aati, wait karo (Max 15 secs)
+        # 🚨 WAIT LOOP (Wait & Scan for countries)
         countries = []
-        for _ in range(5): # 5 attempts (3 secs each = 15 secs max)
-            await asyncio.sleep(3)
+        for i in range(5): # 5 attempts (2 secs each = 10 secs max)
+            await asyncio.sleep(2)
             found_buttons = False
             
             async for msg in app.get_chat_history(bot_username, limit=1):
@@ -95,9 +95,8 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
                                 price_match = re.search(r'\(([^)]+)\)', btn.text)
                                 price = price_match.group(1) if price_match else "N/A"
                                 
-                                # Remove emojis/flags
                                 clean_name = btn.text.split('(')[0].strip()
-                                clean_name = ''.join(i for i in clean_name if ord(i) < 128).strip()
+                                clean_name = ''.join(c for c in clean_name if ord(c) < 128).strip()
                                 
                                 temp_countries.append({
                                     "name": clean_name, 
@@ -110,10 +109,10 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
                         break # Break out of get_chat_history loop
             
             if found_buttons and countries:
-                log.info(f"Found {len(countries)} countries with buttons.")
+                log.info(f"Found {len(countries)} countries after {i+1} attempts.")
                 return countries
                 
-        log.error("Country buttons not found after 15 seconds.")
+        log.error("Country buttons not found after 10 seconds.")
         return []
 
     except Exception as e:
@@ -140,19 +139,18 @@ async def select_country_and_get_numbers(app: Client, bot_username: str, country
 
         log.info(f"Country '{country_original_text}' selected. Waiting for numbers...")
         
-        # Wait for bot to send numbers
-        for _ in range(5):
-            await asyncio.sleep(3)
+        for i in range(5):
+            await asyncio.sleep(2)
             async for msg in app.get_chat_history(bot_username, limit=1):
                 if msg.text:
                     found = re.findall(r'\+?\d{10,12}', msg.text)
                     if found:
                         numbers.extend(found)
-                        log.info(f"Found {len(found)} numbers.")
+                        log.info(f"Found {len(found)} numbers after {i+1} attempts.")
                         return numbers
-            log.warning("Waiting for numbers...")
+            log.warning(f"Waiting for numbers... (Attempt {i+1})")
             
-        log.warning("No numbers received after 15s.")
+        log.warning("No numbers received after 10s.")
         return []
     except Exception as e:
         log.error(f"Scraper Error (select country): {e}")
