@@ -29,6 +29,7 @@ async def handle_force_join(app: Client, bot_username: str, msg):
                         except Exception as e:
                             log.error(f"Failed to join {channel}: {e}")
         
+        # Click "I Joined - Check Now" (if it exists)
         if msg.reply_markup:
             for row in msg.reply_markup.inline_keyboard:
                 for btn in row:
@@ -42,24 +43,10 @@ async def handle_force_join(app: Client, bot_username: str, msg):
                             log.error(f"Failed to click 'I Joined': {e}")
     return False
 
-async def scan_and_click_button(app: Client, bot_username: str, button_text_match: str):
-    async for msg in app.get_chat_history(bot_username, limit=5):
-        if msg.reply_markup:
-            for row in msg.reply_markup.inline_keyboard:
-                for btn in row:
-                    if button_text_match.upper() in btn.text.upper():
-                        try:
-                            await msg.click(btn.text)
-                            log.info(f"Clicked button: {btn.text}")
-                            return True
-                        except Exception as e:
-                            log.error(f"Click failed on {btn.text}: {e}")
-    return False
-
 async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platform: str = "PayPal"):
     numbers = []
     try:
-        # 🚨 STEP 1: /start bhejo
+        # STEP 1: Initial /start
         await app.send_message(bot_username, "/start")
         await asyncio.sleep(4)
         
@@ -68,84 +55,67 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
             latest_msg = msg
             break
         
-        # 🚨 STEP 2: Force-Join check karo
+        # STEP 2: Force-Join Check
         if latest_msg and latest_msg.text:
             if "join our channel" in latest_msg.text.lower():
-                is_force_join = await handle_force_join(app, bot_username, latest_msg)
-                if is_force_join:
-                    log.info("Force-Join complete. Sending /start again to get menu...")
-                    await app.send_message(bot_username, "/start")
-                    await asyncio.sleep(4)
-                    async for msg in app.get_chat_history(bot_username, limit=1):
-                        latest_msg = msg
-                        break
+                await handle_force_join(app, bot_username, latest_msg)
+                # After joining, we MUST send /start again to get the real menu
+                log.info("Sending /start after Force-Join...")
+                await app.send_message(bot_username, "/start")
+                await asyncio.sleep(4)
 
-        # 🚨 STEP 3: "GET NUMBER" button dhundho
-        clicked_get_number = False
-        async for msg in app.get_chat_history(bot_username, limit=5):
-            if msg.reply_markup:
-                for row in msg.reply_markup.inline_keyboard:
+        # 🚨 STEP 3: SEND TEXT "GET NUMBER" (TERA IDEA)
+        log.info("Directly sending text 'GET NUMBER' to bot...")
+        await app.send_message(bot_username, "GET NUMBER")
+        await asyncio.sleep(4)
+
+        # STEP 4: Find the response and click Platform
+        clicked_platform = False
+        async for msg2 in app.get_chat_history(bot_username, limit=5):
+            if msg2.reply_markup:
+                for row in msg2.reply_markup.inline_keyboard:
                     for btn in row:
-                        if "GET NUMBER" in btn.text.upper() or "GET" in btn.text.upper():
-                            try:
-                                await msg.click(btn.text)
-                                clicked_get_number = True
-                                log.info("Clicked GET NUMBER button.")
-                                break
-                            except Exception as e:
-                                log.error(f"Click failed: {e}")
-                if clicked_get_number: break
-
-        # 🚨 Agar button nahi mila, toh /start bhej ke wapas try karo
-        if not clicked_get_number:
-            log.warning("GET NUMBER button not found. Sending /start as backup...")
-            await app.send_message(bot_username, "/start")
-            await asyncio.sleep(4)
-            clicked_get_number = await scan_and_click_button(app, bot_username, "GET NUMBER")
-
-        if not clicked_get_number:
-            log.error("Bot menu is broken. Could not find GET NUMBER button.")
-            return []
-
-        await asyncio.sleep(3)
+                        if target_platform.upper() in btn.text.upper():
+                            await msg2.click(btn.text)
+                            clicked_platform = True
+                            log.info(f"Selected platform: {target_platform}")
+                            break
+                    if clicked_platform: break
         
-        # 🚨 STEP 4: Platform select karo
-        clicked_platform = await scan_and_click_button(app, bot_username, target_platform.upper())
         if not clicked_platform:
-            # Fallback: First button click
+            # Fallback: Click first available platform if exact match not found
             async for msg2 in app.get_chat_history(bot_username, limit=1):
                 if msg2.reply_markup and msg2.reply_markup.inline_keyboard:
                     await msg2.click(msg2.reply_markup.inline_keyboard[0][0].text)
                     log.warning(f"Platform {target_platform} not found. Clicked first available.")
                     break
+        
         await asyncio.sleep(3)
 
-        # 🚨 STEP 5: Country select karo
-        # Check karo ki kitne countries available hain
-        available_countries = []
-        async for msg3 in app.get_chat_history(bot_username, limit=1):
+        # STEP 5: Select Country
+        clicked_country = False
+        async for msg3 in app.get_chat_history(bot_username, limit=5):
             if msg3.reply_markup:
                 for row in msg3.reply_markup.inline_keyboard:
                     for btn in row:
-                        # Skip buttons like Back/Cancel
-                        if btn.text.upper() not in ["BACK", "CANCEL", "🔙", "❌"]:
-                            available_countries.append(btn.text)
-
-        if len(available_countries) == 1:
-            # Sirf ek country available hai, use select karo
-            log.info(f"Only one country available: {available_countries[0]}. Selecting...")
-            await scan_and_click_button(app, bot_username, available_countries[0])
-        else:
-            # Multiple countries hain, India dhundho
-            clicked_country = await scan_and_click_button(app, bot_username, "INDIA")
-            if not clicked_country and available_countries:
-                # Agar India nahi mila, toh pehla select karo
-                await scan_and_click_button(app, bot_username, available_countries[0])
-                log.warning("Country INDIA not found. Clicked first available.")
-                
-        await asyncio.sleep(3)
+                        if "INDIA" in btn.text.upper():
+                            await msg3.click(btn.text)
+                            clicked_country = True
+                            log.info("Selected country: INDIA")
+                            break
+                    if clicked_country: break
         
-        # 🚨 STEP 6: Numbers extract karo
+        if not clicked_country:
+            # Fallback: Click first available country
+            async for msg3 in app.get_chat_history(bot_username, limit=1):
+                if msg3.reply_markup and msg3.reply_markup.inline_keyboard:
+                    await msg3.click(msg3.reply_markup.inline_keyboard[0][0].text)
+                    log.warning("Country INDIA not found. Clicked first available.")
+                    break
+
+        await asyncio.sleep(3)
+
+        # STEP 6: Extract Numbers
         async for msg4 in app.get_chat_history(bot_username, limit=1):
             if msg4.text:
                 found = re.findall(r'\+?\d{10,12}', msg4.text)
@@ -155,6 +125,7 @@ async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platfor
                 else:
                     log.warning("No numbers found in text. Bot might be out of stock.")
                     log.warning(f"Bot replied: {msg4.text[:100]}")
+                    
     except Exception as e:
         log.error(f"Scraper Error: {e}")
         
