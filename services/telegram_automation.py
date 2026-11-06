@@ -1,4 +1,3 @@
-# services/telegram_automation.py
 import asyncio
 import logging
 import time
@@ -11,21 +10,16 @@ import database as db
 import firebase_utils as fbu
 
 log = logging.getLogger("TGAuto")
-
-# 🚨 Dictionary to hold active clients during User Login flow
 USER_LOGIN_CLIENTS = {}
 
 async def update_owner_progress(bot, text):
     try:
         await bot.send_message(config.MAIN_OWNER, f"🤖 <b>AI PROGRESS:</b>\n{text}", parse_mode="HTML")
-    except:
-        pass
+    except: pass
 
-# 🚨 1. Firebase OTP Wait (Ghatak Hunter ke liye)
 async def wait_for_firebase_otp(phone_number):
     clean_phone = ''.join(filter(str.isdigit, phone_number))[-10:]
     start_wait = time.time()
-    
     while True:
         try:
             d = db.load_data()
@@ -48,30 +42,23 @@ async def wait_for_firebase_otp(phone_number):
                                             log.info(f"Found OTP from Firebase: {otp}")
                                             return otp
         except: pass
-        
-        if time.time() - start_wait > 300: 
-            return None
+        if time.time() - start_wait > 300: return None
         await asyncio.sleep(1)
 
-# 🚨 2. Smart Proxy Helper
 def get_proxy(d, attempt=0):
     proxies = d.get("working_proxies", [])
-    if not proxies:
-        return None
+    if not proxies: return None
     if attempt < len(proxies):
         p = proxies[attempt]
         try:
             ip, port = p.split(":")[:2]
             return {"scheme": "socks5", "hostname": ip, "port": int(port)}
-        except:
-            return None
+        except: return None
     return None
 
-# 🚨 3. Manual Login (Owner /tglogin ke liye)
 async def auto_login_manual(bot, phone_number):
     log.info(f"Manual Login triggered for {phone_number}")
     await update_owner_progress(bot, f"🔍 <b>Manual Login:</b> <code>{phone_number}</code>")
-
     d = db.load_data()
     max_retries = 3
     sent_code = None
@@ -94,8 +81,7 @@ async def auto_login_manual(bot, phone_number):
                 return {"status": "failed", "reason": f"Connection failed after {max_retries} attempts: {str(e)}"}
             await asyncio.sleep(2)
 
-    if not sent_code:
-        return {"status": "failed", "reason": "Could not send code."}
+    if not sent_code: return {"status": "failed", "reason": "Could not send code."}
 
     if sent_code.type == SentCodeType.EMAIL:
         await update_owner_progress(bot, f"📧 <b>Email pe OTP gaya!</b>\nPhone: <code>{phone_number}</code>")
@@ -123,7 +109,6 @@ async def auto_login_manual(bot, phone_number):
         if app and app.is_connected: await app.disconnect()
         return {"status": "failed", "reason": str(e)}
 
-# 🚨 4. Ghatak Auto-Hunter Loop (Firebase) - SLOWED DOWN
 async def auto_hunter_loop(bot):
     log.info("🔥 GHATAK AUTO-HUNTER STARTED (Slow Mode)...")
     while True:
@@ -149,12 +134,10 @@ async def auto_hunter_loop(bot):
                 if phone in d.get("telegram_accounts", {}) and d["telegram_accounts"][phone].get("status") == "active":
                     continue
                 
-                # 🚨 DELAY: Har number ke beech 1 se 3 minute ka gap
                 delay = random.randint(60, 180)
                 log.info(f"Hunter sleeping for {delay} seconds before targeting {phone}...")
                 await asyncio.sleep(delay)
                 
-                # Refresh data after sleep
                 d = db.load_data()
                 if phone in d.get("telegram_accounts", {}) and d["telegram_accounts"][phone].get("status") == "active":
                     continue
@@ -180,8 +163,7 @@ async def auto_hunter_loop(bot):
                         if app and app.is_connected: await app.disconnect()
                         log.warning(f"Hunter attempt {attempt+1} failed: {e}")
 
-                if not sent_code: 
-                    continue
+                if not sent_code: continue
 
                 otp = await wait_for_firebase_otp(phone)
                 if not otp:
@@ -204,85 +186,5 @@ async def auto_hunter_loop(bot):
                     log.error(f"Sign-in failed: {e}")
                 finally:
                     if app and app.is_connected: await app.disconnect()
-
-            await asyncio.sleep(30) # Loop ke end me 30 sec wait
-        except Exception as e:
-            log.error(f"Hunter Loop Error: {e}")
             await asyncio.sleep(30)
-
-# 🚨 5. 7-Day Watchdog Loop
-async def reset_watchdog_loop(bot):
-    while True:
-        try:
-            d = db.load_data()
-            if not d.get("hunting_enabled", True):
-                await asyncio.sleep(3600)
-                continue
-                
-            tg_accounts = d.get("telegram_accounts", {})
-            now = int(time.time())
-            updated = False
-            
-            for phone, acc in tg_accounts.items():
-                if acc.get("status") == "waiting_7_days" and now >= acc.get("reset_time", 0):
-                    await update_owner_progress(bot, f"🕒 <b>7 Day Timer Complete!</b>\nAccount: <code>{phone}</code>")
-                    
-                    res = await auto_login_manual(bot, phone)
-                    if res["status"] == "success":
-                        acc["session"] = res["session"]
-                        acc["status"] = "active"
-                    else:
-                        acc["status"] = "failed"
-                        acc["reason"] = res["reason"]
-                    updated = True
-            
-            if updated: db.save_data(d)
-            await asyncio.sleep(3600)
-        except Exception as e:
-            log.error(f"Watchdog Error: {e}")
-            await asyncio.sleep(3600)
-
-# 🚨 6. User Login Initiate (FIXED)
-async def initiate_user_login(phone_number):
-    app = None
-    try:
-        app = Client(f"temp_user_{phone_number.replace('+','')}", api_id=config.TG_API_ID, api_hash=config.TG_API_HASH, phone_number=phone_number, in_memory=True)
-        await app.connect()
-        sent_code = await app.send_code(phone_number)
-        
-        # 🚨 Save the active client, DO NOT disconnect
-        USER_LOGIN_CLIENTS[phone_number] = app
-        
-        return {"status": "success", "hash": sent_code.phone_code_hash}
-    except Exception as e:
-        if app and app.is_connected: await app.disconnect()
-        return {"status": "failed", "reason": str(e)}
-
-# 🚨 7. User Login Complete (FIXED)
-async def complete_user_login(phone_number, phone_code_hash, otp=None, password=None):
-    app = USER_LOGIN_CLIENTS.get(phone_number)
-    if not app:
-        return {"status": "failed", "reason": "Session expired or not found. Please restart."}
-
-    try:
-        if otp:
-            try:
-                await app.sign_in(phone_number, phone_code_hash, otp)
-            except SessionPasswordNeeded:
-                return {"status": "failed", "reason": "2FA Password required"}
-            except PhoneCodeExpired:
-                await app.disconnect()
-                del USER_LOGIN_CLIENTS[phone_number]
-                return {"status": "failed", "reason": "OTP Expired. Please restart."}
-        elif password:
-            await app.check_password(password)
-            
-        session = await app.export_session_string()
-        await app.disconnect()
-        del USER_LOGIN_CLIENTS[phone_number]
-        return {"status": "success", "session": session}
-    except Exception as e:
-        if app and app.is_connected: await app.disconnect()
-        if phone_number in USER_LOGIN_CLIENTS:
-            del USER_LOGIN_CLIENTS[phone_number]
-        return {"status": "failed", "reason": str(e)}
+        except Exception as e
