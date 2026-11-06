@@ -4,11 +4,12 @@ import logging
 import re
 from pyrogram import Client
 from pyrogram.errors import UserAlreadyParticipant, FloodWait
+from pyrogram.types import Message
 import config
 
 log = logging.getLogger("OTPScraper")
 
-async def handle_force_join(app: Client, bot_username: str, msg):
+async def handle_force_join(app: Client, bot_username: str, msg: Message):
     text = msg.text.lower() if msg.text else ""
     if "join our channel" in text or "join our channel(s)" in text:
         log.info("Force-Join detected! AI is joining channels...")
@@ -42,78 +43,75 @@ async def handle_force_join(app: Client, bot_username: str, msg):
                             log.error(f"Failed to click 'I Joined': {e}")
     return False
 
+# 🚨 Helper to wait for next message from bot
+async def get_next_bot_message(app: Client, bot_username: str, timeout=15):
+    try:
+        # wait_for naye message ka wait karta hai
+        msg = await app.wait_for(
+            chat_id=bot_username,
+            timeout=timeout
+        )
+        return msg
+    except asyncio.TimeoutError:
+        return None
+
 async def get_available_countries(app: Client, bot_username: str, target_platform: str = "PayPal"):
     try:
         log.info(f"Trying to get countries for {target_platform}...")
         
-        await app.send_message(bot_username, "GET NUMBER")
-        await asyncio.sleep(4)
+        # Start Command
+        await app.send_message(bot_username, "/start")
+        await asyncio.sleep(2)
+        msg = await get_next_bot_message(app, bot_username)
         
-        latest_msg = None
-        async for msg in app.get_chat_history(bot_username, limit=1):
-            latest_msg = msg
-            break
-            
-        if not latest_msg: return []
-
-        clicked_platform = False
-        if latest_msg.reply_markup:
-            for row in latest_msg.reply_markup.inline_keyboard:
-                for btn in row:
-                    if target_platform.upper() in btn.text.upper():
-                        await latest_msg.click(btn.text)
-                        clicked_platform = True
-                        break
-                if clicked_platform: break
-        
-        if not clicked_platform:
+        if msg and msg.text and "join our channel" in msg.text.lower():
+            await handle_force_join(app, bot_username, msg)
             await app.send_message(bot_username, "/start")
-            await asyncio.sleep(3)
-            await app.send_message(bot_username, "GET NUMBER")
-            await asyncio.sleep(4)
-            async for msg in app.get_chat_history(bot_username, limit=1):
-                if msg.reply_markup:
-                    for row in msg.reply_markup.inline_keyboard:
-                        for btn in row:
-                            if target_platform.upper() in btn.text.upper():
-                                await msg.click(btn.text)
-                                clicked_platform = True
-                                break
-                        if clicked_platform: break
-            if not clicked_platform: return []
+            await asyncio.sleep(2)
 
-        log.info("Platform clicked. Waiting for country list...")
+        # Send GET NUMBER
+        await app.send_message(bot_username, "GET NUMBER")
+        await asyncio.sleep(2)
+        msg = await get_next_bot_message(app, bot_username)
         
-        countries = []
-        for i in range(6):
-            await asyncio.sleep(2.5)
-            async for msg in app.get_chat_history(bot_username, limit=3):
-                if msg.reply_markup:
-                    temp_countries = []
-                    for row in msg.reply_markup.inline_keyboard:
-                        for btn in row:
-                            if btn.text.upper() not in ["BACK", "CANCEL", "🔙", "❌"]:
-                                price_match = re.search(r'\(([^)]+)\)', btn.text)
-                                price = price_match.group(1) if price_match else "N/A"
-                                clean_name = btn.text.split('(')[0].strip()
-                                clean_name = ''.join(c for c in clean_name if ord(c) < 128).strip()
-                                
-                                temp_countries.append({
-                                    "name": clean_name, 
-                                    "price": price,
-                                    "original_text": btn.text
-                                })
-                    
-                    if temp_countries:
-                        countries = temp_countries
-                        break
-            
-            if countries:
-                log.info(f"Found {len(countries)} countries after {i+1} attempts.")
-                return countries
+        if not msg or not msg.reply_markup:
+            log.error("No menu after GET NUMBER.")
+            return []
 
-        log.error("Country buttons not found after 15 seconds.")
-        return []
+        # Click Platform
+        clicked = False
+        for row in msg.reply_markup.inline_keyboard:
+            for btn in row:
+                if target_platform.upper() in btn.text.upper():
+                    await msg.click(btn.text)
+                    clicked = True
+                    break
+            if clicked: break
+            
+        if not clicked: return []
+
+        # 🚨 Ab wait karo country list ke liye (Listen Mode)
+        log.info("Platform selected. Waiting for country list...")
+        country_msg = await get_next_bot_message(app, bot_username)
+        
+        if not country_msg or not country_msg.reply_markup:
+            return []
+
+        countries = []
+        for row in country_msg.reply_markup.inline_keyboard:
+            for btn in row:
+                if btn.text.upper() not in ["BACK", "CANCEL", "🔙", "❌"]:
+                    price_match = re.search(r'\(([^)]+)\)', btn.text)
+                    price = price_match.group(1) if price_match else "N/A"
+                    clean_name = btn.text.split('(')[0].strip()
+                    clean_name = ''.join(c for c in clean_name if ord(c) < 128).strip()
+                    
+                    countries.append({
+                        "name": clean_name, 
+                        "price": price,
+                        "original_text": btn.text
+                    })
+        return countries
 
     except Exception as e:
         log.error(f"Scraper Error (get countries): {e}")
@@ -121,88 +119,58 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
 
 async def select_country_and_get_numbers(app: Client, bot_username: str, country_original_text: str):
     try:
-        clicked_country = False
-        async for msg in app.get_chat_history(bot_username, limit=5):
-            if msg.reply_markup:
-                for row in msg.reply_markup.inline_keyboard:
-                    for btn in row:
-                        if btn.text == country_original_text:
-                            await msg.click(btn.text)
-                            clicked_country = True
-                            break
-                    if clicked_country: break
+        # Note: Country select karne ke liye hume us purane message ke buttons click karne hain
+        # Par wait_for sirf naye messages sunta hai, isliye purane message ko history se nikalna padega
+        # Ek trick: send "/country" command? Nahi. Hum just last message uthayenge history se.
         
-        if not clicked_country:
-            log.error(f"Could not find country button: {country_original_text}")
+        # Kyunki user ne country list abhi dekhi hai, wo latest message me hi hogi
+        msg_to_click = None
+        async for msg in app.get_chat_history(bot_username, limit=1):
+            msg_to_click = msg
+            break
+            
+        if not msg_to_click or not msg_to_click.reply_markup:
+            log.error("Country menu not found in history.")
             return []
 
-        log.info(f"Country '{country_original_text}' selected. Waiting for numbers...")
+        clicked_country = False
+        for row in msg_to_click.reply_markup.inline_keyboard:
+            for btn in row:
+                if btn.text == country_original_text:
+                    await msg_to_click.click(btn.text)
+                    clicked_country = True
+                    break
+            if clicked_country: break
+        
+        if not clicked_country: return []
+
+        log.info(f"Country selected. Waiting for numbers (Listen Mode)...")
         
         numbers = []
-        for i in range(6):
-            await asyncio.sleep(2.5)
-            async for msg in app.get_chat_history(bot_username, limit=2):
-                # 1. Check Message Text
-                if msg.text:
-                    found = re.findall(r'\+?\d{10,12}', msg.text)
-                    if found: numbers.extend(found)
-                
-                # 2. Check Inline Buttons & Copyable Floating Buttons
-                if msg.reply_markup:
-                    for row in msg.reply_markup.inline_keyboard:
-                        for btn in row:
-                            # Check Button Text
-                            found_btn = re.findall(r'\+?\d{10,12}', btn.text)
-                            if found_btn: numbers.extend(found_btn)
-                            
-                            # Check Floating Copy Text (Important for your issue)
-                            if hasattr(btn, 'copy_text') and btn.copy_text:
-                                found_copy = re.findall(r'\+?\d{10,12}', btn.copy_text.text)
-                                if found_copy: numbers.extend(found_copy)
+        # Wait for number message (max 3 retries)
+        for _ in range(3):
+            num_msg = await get_next_bot_message(app, bot_username, timeout=10)
+            if not num_msg: continue
+            
+            # Check text
+            if num_msg.text:
+                found = re.findall(r'\+?\d{10,12}', num_msg.text)
+                if found: numbers.extend(found)
+            
+            # Check buttons/copy_text
+            if num_msg.reply_markup:
+                for row in num_msg.reply_markup.inline_keyboard:
+                    for btn in row:
+                        found_btn = re.findall(r'\+?\d{10,12}', btn.text)
+                        if found_btn: numbers.extend(found_btn)
+                        if hasattr(btn, 'copy_text') and btn.copy_text:
+                            found_copy = re.findall(r'\+?\d{10,12}', btn.copy_text.text)
+                            if found_copy: numbers.extend(found_copy)
             
             if numbers:
-                numbers = list(set(numbers))
-                log.info(f"Found {len(numbers)} numbers after {i+1} attempts.")
-                return numbers
-                
-            log.warning(f"Waiting for numbers... (Attempt {i+1})")
-        
-        # 3. No numbers found? Click REFRESH!
-        log.warning("No numbers found. Trying to click REFRESH button...")
-        refreshed = False
-        async for msg in app.get_chat_history(bot_username, limit=2):
-            if msg.reply_markup:
-                for row in msg.reply_markup.inline_keyboard:
-                    for btn in row:
-                        if "REFRESH" in btn.text.upper():
-                            await msg.click(btn.text)
-                            refreshed = True
-                            break
-                    if refreshed: break
-            if refreshed: break
-        
-        if refreshed:
-            log.info("Clicked REFRESH. Waiting for new numbers...")
-            await asyncio.sleep(4)
-            # Re-scan after refresh
-            async for msg in app.get_chat_history(bot_username, limit=2):
-                if msg.text:
-                    found = re.findall(r'\+?\d{10,12}', msg.text)
-                    if found: numbers.extend(found)
-                if msg.reply_markup:
-                    for row in msg.reply_markup.inline_keyboard:
-                        for btn in row:
-                            found_btn = re.findall(r'\+?\d{10,12}', btn.text)
-                            if found_btn: numbers.extend(found_btn)
-                            if hasattr(btn, 'copy_text') and btn.copy_text:
-                                found_copy = re.findall(r'\+?\d{10,12}', btn.copy_text.text)
-                                if found_copy: numbers.extend(found_copy)
-            numbers = list(set(numbers))
-            if numbers:
-                log.info(f"Found {len(numbers)} numbers after REFRESH.")
-                return numbers
+                return list(set(numbers))
 
-        log.warning("Still no numbers after REFRESH.")
+        log.warning("No numbers found after waiting.")
         return []
         
     except Exception as e:
@@ -210,17 +178,19 @@ async def select_country_and_get_numbers(app: Client, bot_username: str, country
         return []
 
 async def wait_for_otp_from_bot(app: Client, bot_username: str, timeout=300):
-    import time
-    start = time.time()
-    while time.time() - start < timeout:
+    log.info("Waiting for OTP (Listen Mode)...")
+    start_time = asyncio.get_event_loop().time()
+    
+    while (asyncio.get_event_loop().time() - start_time) < timeout:
         try:
-            async for msg in app.get_chat_history(bot_username, limit=3):
-                if msg.text:
-                    match = re.search(r'\b(\d{4,6})\b', msg.text)
-                    if match:
-                        return match.group(1)
+            msg = await get_next_bot_message(app, bot_username, timeout=10)
+            if msg and msg.text:
+                # Regex for OTP (4-6 digits)
+                match = re.search(r'\b(\d{4,6})\b', msg.text)
+                if match:
+                    log.info(f"OTP Found: {match.group(1)}")
+                    return match.group(1)
         except Exception as e:
-            log.error(f"OTP wait error: {e}")
+            log.error(f"OTP Wait Error: {e}")
             
-        await asyncio.sleep(5)
     return None
