@@ -46,20 +46,16 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
     try:
         log.info(f"Trying to get countries for {target_platform}...")
         
-        # 1. Send text "GET NUMBER" directly
         await app.send_message(bot_username, "GET NUMBER")
         await asyncio.sleep(4)
         
-        # 2. Check latest message
         latest_msg = None
         async for msg in app.get_chat_history(bot_username, limit=1):
             latest_msg = msg
             break
             
-        if not latest_msg:
-            return []
+        if not latest_msg: return []
 
-        # 3. Click Platform
         clicked_platform = False
         if latest_msg.reply_markup:
             for row in latest_msg.reply_markup.inline_keyboard:
@@ -71,12 +67,10 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
                 if clicked_platform: break
         
         if not clicked_platform:
-            log.error("Platform button not found. Bot might be asking for Force-Join or /start.")
-            # Try sending /start and GET NUMBER again
             await app.send_message(bot_username, "/start")
             await asyncio.sleep(3)
             await app.send_message(bot_username, "GET NUMBER")
-            await asyncio.sleep(3)
+            await asyncio.sleep(4)
             async for msg in app.get_chat_history(bot_username, limit=1):
                 if msg.reply_markup:
                     for row in msg.reply_markup.inline_keyboard:
@@ -90,12 +84,9 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
 
         log.info("Platform clicked. Waiting for country list...")
         
-        # 🚨 4. WAIT & SCAN FOR COUNTRIES
         countries = []
-        for i in range(6): # 6 attempts (2.5 sec each = 15 secs)
+        for i in range(6):
             await asyncio.sleep(2.5)
-            
-            # Scan last 3 messages to find buttons
             async for msg in app.get_chat_history(bot_username, limit=3):
                 if msg.reply_markup:
                     temp_countries = []
@@ -115,7 +106,7 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
                     
                     if temp_countries:
                         countries = temp_countries
-                        break # Found countries, break inner loop
+                        break
             
             if countries:
                 log.info(f"Found {len(countries)} countries after {i+1} attempts.")
@@ -129,7 +120,6 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
         return []
 
 async def select_country_and_get_numbers(app: Client, bot_username: str, country_original_text: str):
-    numbers = []
     try:
         clicked_country = False
         async for msg in app.get_chat_history(bot_username, limit=5):
@@ -148,19 +138,66 @@ async def select_country_and_get_numbers(app: Client, bot_username: str, country
 
         log.info(f"Country '{country_original_text}' selected. Waiting for numbers...")
         
+        # 🚨 1. WAIT FOR NUMBERS (Scan Text & Buttons)
+        numbers = []
         for i in range(6):
             await asyncio.sleep(2.5)
             async for msg in app.get_chat_history(bot_username, limit=2):
+                # A. Check Text
                 if msg.text:
                     found = re.findall(r'\+?\d{10,12}', msg.text)
-                    if found:
-                        numbers.extend(found)
-                        log.info(f"Found {len(found)} numbers after {i+1} attempts.")
-                        return numbers
-            log.warning(f"Waiting for numbers... (Attempt {i+1})")
+                    if found: numbers.extend(found)
+                
+                # B. Check Buttons (Tere screenshot me buttons me numbers the)
+                if msg.reply_markup:
+                    for row in msg.reply_markup.inline_keyboard:
+                        for btn in row:
+                            found_btn = re.findall(r'\+?\d{10,12}', btn.text)
+                            if found_btn: numbers.extend(found_btn)
             
-        log.warning("No numbers received after 15s.")
+            if numbers:
+                # Remove duplicates
+                numbers = list(set(numbers))
+                log.info(f"Found {len(numbers)} numbers after {i+1} attempts.")
+                return numbers
+                
+            log.warning(f"Waiting for numbers... (Attempt {i+1})")
+        
+        # 🚨 2. NO NUMBERS FOUND? CLICK REFRESH!
+        log.warning("No numbers found. Trying to click REFRESH button...")
+        refreshed = False
+        async for msg in app.get_chat_history(bot_username, limit=2):
+            if msg.reply_markup:
+                for row in msg.reply_markup.inline_keyboard:
+                    for btn in row:
+                        if "REFRESH" in btn.text.upper():
+                            await msg.click(btn.text)
+                            refreshed = True
+                            break
+                    if refreshed: break
+            if refreshed: break
+        
+        if refreshed:
+            log.info("Clicked REFRESH. Waiting for new numbers...")
+            await asyncio.sleep(4)
+            # Ek baar fir scan karo
+            async for msg in app.get_chat_history(bot_username, limit=2):
+                if msg.text:
+                    found = re.findall(r'\+?\d{10,12}', msg.text)
+                    if found: numbers.extend(found)
+                if msg.reply_markup:
+                    for row in msg.reply_markup.inline_keyboard:
+                        for btn in row:
+                            found_btn = re.findall(r'\+?\d{10,12}', btn.text)
+                            if found_btn: numbers.extend(found_btn)
+            numbers = list(set(numbers))
+            if numbers:
+                log.info(f"Found {len(numbers)} numbers after REFRESH.")
+                return numbers
+
+        log.warning("Still no numbers after REFRESH.")
         return []
+        
     except Exception as e:
         log.error(f"Scraper Error (select country): {e}")
         return []
@@ -179,4 +216,4 @@ async def wait_for_otp_from_bot(app: Client, bot_username: str, timeout=300):
             log.error(f"OTP wait error: {e}")
             
         await asyncio.sleep(5)
-    return None2
+    return None
