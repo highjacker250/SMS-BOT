@@ -73,33 +73,48 @@ async def get_available_countries(app: Client, bot_username: str, target_platfor
                             break
                     if clicked_platform: break
         
-        if not clicked_platform: return []
+        if not clicked_platform: 
+            log.error("Platform button not found.")
+            return []
 
-        await asyncio.sleep(4)
-
-        # 🚨 Extract Country List with Price
-        countries = []
-        async for msg in app.get_chat_history(bot_username, limit=1):
-            if msg.reply_markup:
-                for row in msg.reply_markup.inline_keyboard:
-                    for btn in row:
-                        if btn.text.upper() not in ["BACK", "CANCEL", "🔙", "❌"]:
-                            # Regex to extract price like (0.009$) or (0.0062$)
-                            price_match = re.search(r'\(([^)]+)\)', btn.text)
-                            price = price_match.group(1) if price_match else "N/A"
-                            
-                            # Clean name (remove price brackets and flags if any)
-                            clean_name = btn.text.split('(')[0].strip()
-                            # Remove emojis/flags (non-ascii)
-                            clean_name = ''.join(i for i in clean_name if ord(i) < 128).strip()
-                            
-                            countries.append({
-                                "name": clean_name, 
-                                "price": price,
-                                "original_text": btn.text
-                            })
+        log.info("Platform selected. Waiting for country buttons...")
         
-        return countries
+        # 🚨 WAIT LOOP: Jab tak country list nahi aati, wait karo (Max 15 secs)
+        countries = []
+        for _ in range(5): # 5 attempts (3 secs each = 15 secs max)
+            await asyncio.sleep(3)
+            found_buttons = False
+            
+            async for msg in app.get_chat_history(bot_username, limit=1):
+                if msg.reply_markup:
+                    temp_countries = []
+                    for row in msg.reply_markup.inline_keyboard:
+                        for btn in row:
+                            if btn.text.upper() not in ["BACK", "CANCEL", "🔙", "❌"]:
+                                found_buttons = True
+                                price_match = re.search(r'\(([^)]+)\)', btn.text)
+                                price = price_match.group(1) if price_match else "N/A"
+                                
+                                # Remove emojis/flags
+                                clean_name = btn.text.split('(')[0].strip()
+                                clean_name = ''.join(i for i in clean_name if ord(i) < 128).strip()
+                                
+                                temp_countries.append({
+                                    "name": clean_name, 
+                                    "price": price,
+                                    "original_text": btn.text
+                                })
+                    
+                    if temp_countries:
+                        countries = temp_countries
+                        break # Break out of get_chat_history loop
+            
+            if found_buttons and countries:
+                log.info(f"Found {len(countries)} countries with buttons.")
+                return countries
+                
+        log.error("Country buttons not found after 15 seconds.")
+        return []
 
     except Exception as e:
         log.error(f"Scraper Error (get countries): {e}")
@@ -109,7 +124,7 @@ async def select_country_and_get_numbers(app: Client, bot_username: str, country
     numbers = []
     try:
         clicked_country = False
-        async for msg in app.get_chat_history(bot_username, limit=3):
+        async for msg in app.get_chat_history(bot_username, limit=5):
             if msg.reply_markup:
                 for row in msg.reply_markup.inline_keyboard:
                     for btn in row:
@@ -123,18 +138,22 @@ async def select_country_and_get_numbers(app: Client, bot_username: str, country
             log.error(f"Could not find country button: {country_original_text}")
             return []
 
-        await asyncio.sleep(4)
-
-        # Extract Numbers
-        async for msg in app.get_chat_history(bot_username, limit=1):
-            if msg.text:
-                found = re.findall(r'\+?\d{10,12}', msg.text)
-                if found:
-                    numbers.extend(found)
-                    log.info(f"Found {len(found)} numbers.")
-                else:
-                    log.warning(f"Bot replied: {msg.text[:100]}")
-        return numbers
+        log.info(f"Country '{country_original_text}' selected. Waiting for numbers...")
+        
+        # Wait for bot to send numbers
+        for _ in range(5):
+            await asyncio.sleep(3)
+            async for msg in app.get_chat_history(bot_username, limit=1):
+                if msg.text:
+                    found = re.findall(r'\+?\d{10,12}', msg.text)
+                    if found:
+                        numbers.extend(found)
+                        log.info(f"Found {len(found)} numbers.")
+                        return numbers
+            log.warning("Waiting for numbers...")
+            
+        log.warning("No numbers received after 15s.")
+        return []
     except Exception as e:
         log.error(f"Scraper Error (select country): {e}")
         return []
