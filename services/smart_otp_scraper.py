@@ -29,7 +29,6 @@ async def handle_force_join(app: Client, bot_username: str, msg):
                         except Exception as e:
                             log.error(f"Failed to join {channel}: {e}")
         
-        # Click "I Joined - Check Now" (if it exists)
         if msg.reply_markup:
             for row in msg.reply_markup.inline_keyboard:
                 for btn in row:
@@ -43,93 +42,102 @@ async def handle_force_join(app: Client, bot_username: str, msg):
                             log.error(f"Failed to click 'I Joined': {e}")
     return False
 
-async def scrape_numbers_from_bot(app: Client, bot_username: str, target_platform: str = "PayPal"):
-    numbers = []
+async def get_available_countries(app: Client, bot_username: str, target_platform: str = "PayPal"):
     try:
-        # STEP 1: Initial /start
         await app.send_message(bot_username, "/start")
-        await asyncio.sleep(4)
+        await asyncio.sleep(3)
         
         latest_msg = None
         async for msg in app.get_chat_history(bot_username, limit=1):
             latest_msg = msg
             break
         
-        # STEP 2: Force-Join Check
-        if latest_msg and latest_msg.text:
-            if "join our channel" in latest_msg.text.lower():
-                await handle_force_join(app, bot_username, latest_msg)
-                # After joining, we MUST send /start again to get the real menu
-                log.info("Sending /start after Force-Join...")
-                await app.send_message(bot_username, "/start")
-                await asyncio.sleep(4)
+        if latest_msg and latest_msg.text and "join our channel" in latest_msg.text.lower():
+            await handle_force_join(app, bot_username, latest_msg)
+            await app.send_message(bot_username, "/start")
+            await asyncio.sleep(3)
 
-        # 🚨 STEP 3: SEND TEXT "GET NUMBER" (TERA IDEA)
-        log.info("Directly sending text 'GET NUMBER' to bot...")
+        # Send text "GET NUMBER"
         await app.send_message(bot_username, "GET NUMBER")
         await asyncio.sleep(4)
 
-        # STEP 4: Find the response and click Platform
+        # Find Platform Button
         clicked_platform = False
-        async for msg2 in app.get_chat_history(bot_username, limit=5):
-            if msg2.reply_markup:
-                for row in msg2.reply_markup.inline_keyboard:
+        async for msg in app.get_chat_history(bot_username, limit=5):
+            if msg.reply_markup:
+                for row in msg.reply_markup.inline_keyboard:
                     for btn in row:
                         if target_platform.upper() in btn.text.upper():
-                            await msg2.click(btn.text)
+                            await msg.click(btn.text)
                             clicked_platform = True
-                            log.info(f"Selected platform: {target_platform}")
                             break
                     if clicked_platform: break
         
-        if not clicked_platform:
-            # Fallback: Click first available platform if exact match not found
-            async for msg2 in app.get_chat_history(bot_username, limit=1):
-                if msg2.reply_markup and msg2.reply_markup.inline_keyboard:
-                    await msg2.click(msg2.reply_markup.inline_keyboard[0][0].text)
-                    log.warning(f"Platform {target_platform} not found. Clicked first available.")
-                    break
-        
-        await asyncio.sleep(3)
+        if not clicked_platform: return []
 
-        # STEP 5: Select Country
-        clicked_country = False
-        async for msg3 in app.get_chat_history(bot_username, limit=5):
-            if msg3.reply_markup:
-                for row in msg3.reply_markup.inline_keyboard:
+        await asyncio.sleep(4)
+
+        # 🚨 Extract Country List with Price
+        countries = []
+        async for msg in app.get_chat_history(bot_username, limit=1):
+            if msg.reply_markup:
+                for row in msg.reply_markup.inline_keyboard:
                     for btn in row:
-                        if "INDIA" in btn.text.upper():
-                            await msg3.click(btn.text)
+                        if btn.text.upper() not in ["BACK", "CANCEL", "🔙", "❌"]:
+                            # Regex to extract price like (0.009$) or (0.0062$)
+                            price_match = re.search(r'\(([^)]+)\)', btn.text)
+                            price = price_match.group(1) if price_match else "N/A"
+                            
+                            # Clean name (remove price brackets and flags if any)
+                            clean_name = btn.text.split('(')[0].strip()
+                            # Remove emojis/flags (non-ascii)
+                            clean_name = ''.join(i for i in clean_name if ord(i) < 128).strip()
+                            
+                            countries.append({
+                                "name": clean_name, 
+                                "price": price,
+                                "original_text": btn.text
+                            })
+        
+        return countries
+
+    except Exception as e:
+        log.error(f"Scraper Error (get countries): {e}")
+        return []
+
+async def select_country_and_get_numbers(app: Client, bot_username: str, country_original_text: str):
+    numbers = []
+    try:
+        clicked_country = False
+        async for msg in app.get_chat_history(bot_username, limit=3):
+            if msg.reply_markup:
+                for row in msg.reply_markup.inline_keyboard:
+                    for btn in row:
+                        if btn.text == country_original_text:
+                            await msg.click(btn.text)
                             clicked_country = True
-                            log.info("Selected country: INDIA")
                             break
                     if clicked_country: break
         
         if not clicked_country:
-            # Fallback: Click first available country
-            async for msg3 in app.get_chat_history(bot_username, limit=1):
-                if msg3.reply_markup and msg3.reply_markup.inline_keyboard:
-                    await msg3.click(msg3.reply_markup.inline_keyboard[0][0].text)
-                    log.warning("Country INDIA not found. Clicked first available.")
-                    break
+            log.error(f"Could not find country button: {country_original_text}")
+            return []
 
-        await asyncio.sleep(3)
+        await asyncio.sleep(4)
 
-        # STEP 6: Extract Numbers
-        async for msg4 in app.get_chat_history(bot_username, limit=1):
-            if msg4.text:
-                found = re.findall(r'\+?\d{10,12}', msg4.text)
+        # Extract Numbers
+        async for msg in app.get_chat_history(bot_username, limit=1):
+            if msg.text:
+                found = re.findall(r'\+?\d{10,12}', msg.text)
                 if found:
                     numbers.extend(found)
                     log.info(f"Found {len(found)} numbers.")
                 else:
-                    log.warning("No numbers found in text. Bot might be out of stock.")
-                    log.warning(f"Bot replied: {msg4.text[:100]}")
-                    
+                    log.warning(f"Bot replied: {msg.text[:100]}")
+        return numbers
     except Exception as e:
-        log.error(f"Scraper Error: {e}")
-        
-    return numbers
+        log.error(f"Scraper Error (select country): {e}")
+        return []
 
 async def wait_for_otp_from_bot(app: Client, bot_username: str, timeout=300):
     import time
