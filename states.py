@@ -2,7 +2,6 @@
 from aiogram.fsm.state import State, StatesGroup
 
 class S(StatesGroup):
-    # Purane states (same rahenge)
     add_bulk_urls = State()
     add_bot = State()
     add_admin = State()
@@ -23,10 +22,11 @@ class S(StatesGroup):
     add_custom_proxy = State()
     add_manual_proxy = State()
     
-    # 🚨 Naye States
+    # 🚨 Naye States (User Auto Logger ke liye)
     user_auto_phone = State()
     user_auto_otp = State()
     user_auto_2fa = State()
     user_auto_bot_username = State()
     user_auto_target = State()
     user_auto_limit = State()
+    user_select_country = State() # Country select karne ke liye
