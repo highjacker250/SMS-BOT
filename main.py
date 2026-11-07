@@ -9,6 +9,7 @@ import uvicorn
 import config
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import CallbackQuery
 
 # 🚨 Router Imports
 from handlers.user import user_router
@@ -29,9 +30,9 @@ dp = Dispatcher(storage=MemoryStorage())
 
 dp.include_routers(owner_router, admin_router, user_router)
 
-# 🚨 Callback handler for OTP Copy (scanner ke liye)
+# 🚨 Yahan copy_otp_ handler hai (kyunki dp yahan hai)
 @dp.callback_query(lambda c: c.data and c.data.startswith("copy_otp_"))
-async def copy_otp_callback(cq):
+async def copy_otp_callback(cq: CallbackQuery):
     otp = cq.data.split("_")[2]
     await cq.answer(f"📋 OTP: {otp}\n\n(Manually copy karein)", show_alert=True)
 
