@@ -1,5 +1,13 @@
 import asyncio, time, logging, random, re
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CopyTextButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# 🚨 SMART IMPORT: Naya aur Purana dono system handle karega
+try:
+    from aiogram.types import CopyTextButton
+    HAS_COPY_TEXT = True
+except ImportError:
+    HAS_COPY_TEXT = False
+
 import database as db
 import firebase_utils as fbu
 from utils.ui import sc
@@ -17,7 +25,13 @@ async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_numb
         f"📞 <b>{sc('number')}:</b> <code>{num_display}</code>\n"
         f"💬 <i>{msg_text[:60]}...</i>"
     )
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"{otp}", copy_text=CopyTextButton(text=otp))]])
+    
+    # 🚨 DONO SYSTEM: Agar naya aiogram hai toh Copy button, warna callback
+    if HAS_COPY_TEXT:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"Copy {otp}", copy_text=CopyTextButton(text=otp))]])
+    else:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"Copy {otp}", callback_data=f"copy_otp_{otp}")]])
+    
     d = db.load_data()
     user = d["users"].get(str(uid))
     if user:
@@ -27,6 +41,12 @@ async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_numb
         db.save_data(d)
     try: await bot.send_message(uid, otp_msg, reply_markup=kb, parse_mode="HTML")
     except Exception: pass
+
+# 🚨 Callback handler (fallback ke liye)
+@dp.callback_query(F.data.startswith("copy_otp_")) # type: ignore
+async def copy_otp_callback(cq):
+    otp = cq.data.split("_")[2]
+    await cq.answer(f"📋 OTP: {otp}\n\n(Manually copy karein)", show_alert=True)
 
 async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_number, service_filter):
     db.set_bot_status("Fast Scanner", f"Checking messages for {dev_id[:8]}...")
