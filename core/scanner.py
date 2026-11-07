@@ -42,12 +42,6 @@ async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_numb
     try: await bot.send_message(uid, otp_msg, reply_markup=kb, parse_mode="HTML")
     except Exception: pass
 
-# 🚨 Callback handler (fallback ke liye)
-@dp.callback_query(F.data.startswith("copy_otp_")) # type: ignore
-async def copy_otp_callback(cq):
-    otp = cq.data.split("_")[2]
-    await cq.answer(f"📋 OTP: {otp}\n\n(Manually copy karein)", show_alert=True)
-
 async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_number, service_filter):
     db.set_bot_status("Fast Scanner", f"Checking messages for {dev_id[:8]}...")
     url = f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5"
