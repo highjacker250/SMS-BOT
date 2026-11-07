@@ -140,8 +140,8 @@ async def user_service(cq: CallbackQuery):
         for n, c in best_nums:
             conf_text = "Backup" if c == "Backup" else f"{c}%"
             nums_text += f"📞 <code>+91{n}</code> | {conf_text}\n"
-            # 🚨 PURANA AIOGRAM BUTTON (CopyTextButton hata diya)
-            kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", callback_data=f"copy_{n}")])
+            # 🚨 Yahan 'user:copy_num:' use kiya hai
+            kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", callback_data=f"user:copy_num:{n}")])
     else:
         nums_text = f"⚠️ <b>{sc('extracting number...')}</b>"
 
@@ -165,10 +165,10 @@ async def user_service(cq: CallbackQuery):
     ]
     await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
 
-# 🚨 NAYA HANDLER: Copy button ke liye (purane aiogram me copy_text nahi hota)
-@user_router.callback_query(F.data.startswith("copy_"))
+# 🚨 FIXED HANDLER for get_number Copy
+@user_router.callback_query(F.data.startswith("user:copy_num:"))
 async def copy_number_callback(cq: CallbackQuery):
-    num = cq.data.split("_")[1]
+    num = cq.data.split(":")[2]
     await cq.answer(f"📋 Number: +91{num}\n\n(Manually copy karein)", show_alert=True)
 
 @user_router.callback_query(F.data.startswith("user:server:"))
@@ -246,7 +246,8 @@ async def user_server(cq: CallbackQuery):
         for n, c in best_nums:
             conf_text = "Backup" if c == "Backup" else f"{c}%"
             nums_text += f"📞 <code>+91{n}</code> | {conf_text}\n"
-            kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", callback_data=f"copy_{n}")])
+            # 🚨 Yahan 'user:copy_num:' use kiya hai
+            kb_nums.append([InlineKeyboardButton(text=f"Copy +91{n}", callback_data=f"user:copy_num:{n}")])
     else:
         nums_text = f"⚠️ <b>{sc('extracting number...')}</b>"
 
