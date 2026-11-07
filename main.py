@@ -1,4 +1,11 @@
 import asyncio
+
+# 🚨 YEH SABSE UPAR HONA CHAHIYE (Pyrogram/uvloop fix)
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
 import logging
 import aiohttp
 from contextlib import asynccontextmanager
@@ -6,13 +13,6 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
 import config
-
-# 🚨 COLAB/PYTHON 3.13 FIX for Pyrogram (Ye sabse upar hona chahiye)
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery
@@ -36,7 +36,7 @@ dp = Dispatcher(storage=MemoryStorage())
 
 dp.include_routers(owner_router, admin_router, user_router)
 
-# 🚨 Callback handler for OTP Copy
+# 🚨 Callback handler for OTP Copy (scanner ke liye)
 @dp.callback_query(lambda c: c.data and c.data.startswith("copy_otp_"))
 async def copy_otp_callback(cq: CallbackQuery):
     otp = cq.data.split("_")[2]
