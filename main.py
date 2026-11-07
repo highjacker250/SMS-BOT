@@ -11,7 +11,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # 🚨 Router Imports
-from handlers.user import user_router # Isme auto_logger aur account_login dono add hain
+from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
 
@@ -27,8 +27,13 @@ log = logging.getLogger("Main")
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# 🚨 Yahan bas 3 router include karne hain
 dp.include_routers(owner_router, admin_router, user_router)
+
+# 🚨 Callback handler for OTP Copy (scanner ke liye)
+@dp.callback_query(lambda c: c.data and c.data.startswith("copy_otp_"))
+async def copy_otp_callback(cq):
+    otp = cq.data.split("_")[2]
+    await cq.answer(f"📋 OTP: {otp}\n\n(Manually copy karein)", show_alert=True)
 
 async def self_ping():
     url = f"http://localhost:{config.PORT}/"
