@@ -50,8 +50,8 @@ async def user_click_timer(cq: CallbackQuery):
         f"<i>{sc('waiting for otp...')}</i>"
     )
     kb = [
-        # 🚨 FIX: CopyTextButton hata diya, callback use kiya
-        [InlineKeyboardButton(text=f"Copy +91{num}", callback_data=f"copy_{num}")], 
+        # 🚨 FIX: 'user:copy_timer:' use kiya hai
+        [InlineKeyboardButton(text=f"Copy +91{num}", callback_data=f"user:copy_timer:{num}")], 
         [btn("remove timer", f"user:remove_timer:{timer_id}", "🗑")],
         [btn("back", "user:upcoming", "🔙")]
     ]
@@ -74,8 +74,8 @@ async def user_remove_timer(cq: CallbackQuery):
     await cq.answer("🗑 Timer removed!", show_alert=True)
     await user_upcoming(cq)
 
-# 🚨 NAYA HANDLER: Copy button ke liye
-@user_router.callback_query(F.data.startswith("copy_"))
-async def copy_number_callback(cq: CallbackQuery):
-    num = cq.data.split("_")[1]
+# 🚨 FIXED HANDLER for timers Copy
+@user_router.callback_query(F.data.startswith("user:copy_timer:"))
+async def copy_timer_callback(cq: CallbackQuery):
+    num = cq.data.split(":")[2]
     await cq.answer(f"📋 Number: +91{num}\n\n(Manually copy karein)", show_alert=True)
