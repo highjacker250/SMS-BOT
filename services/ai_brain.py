@@ -3,7 +3,7 @@ import os
 import json
 import logging
 from groq import Groq
-from openai import AsyncOpenAI # 🚨 Naya import
+from openai import AsyncOpenAI
 import database as db
 import config
 
@@ -12,7 +12,7 @@ log = logging.getLogger("AIBrain")
 # Groq Client (Purana)
 groq_client = Groq(api_key=config.GROQ_API_KEY) if config.GROQ_API_KEY else None
 
-# 🚨 OpenAI Client (Naya)
+# OpenAI Client (Naya)
 openai_client = AsyncOpenAI(api_key=config.OPENAI_API_KEY) if config.OPENAI_API_KEY else None
 
 def get_ready_whatsapp_lines():
@@ -51,10 +51,9 @@ async def get_best_number_with_ai(service_type="whatsapp"):
     )
     
     try:
-        # 🚨 OpenAI API Try karo (Tera key)
         if openai_client:
             response = await openai_client.chat.completions.create(
-                model="gpt-4o-mini", # Fast & Cheap Model
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Find the best {service_type} number for me."}
@@ -77,12 +76,8 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                     function_name = tool_call.function.name
                     function_to_call = available_functions[function_name]
                     function_response = function_to_call()
-                    messages.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": function_name,
-                        "content": function_response,
-                    })
+                    messages.append({"tool_call_id": tool_call.id, "role": "tool", "name": function_name, "content": function_response})
+                
                 second_response = await openai_client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=messages,
@@ -96,18 +91,51 @@ async def get_best_number_with_ai(service_type="whatsapp"):
                 except json.JSONDecodeError:
                     return None, f"AI ne galat format bheja: {final_answer}"
             return None, "AI ne koi number select nahi kiya."
-            
-        # 🚨 Agar OpenAI fail hota hai, toh Groq use karo (Fallback)
+        
+        # Groq Fallback
         elif groq_client:
             response = groq_client.chat.completions.create(
                 model="openai/gpt-oss-120b",
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": f"Find the best {service_type} number for me."}],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Find the best {service_type} number for me."}
+                ],
                 tools=tools,
                 tool_choice="auto",
                 temperature=0.1
             )
-            # ... (Purana Groq logic)
+            # ... (Groq logic same as OpenAI)
+            return None, "Groq fallback logic not fully implemented here."
             
     except Exception as e:
         log.error(f"AI Brain Error: {e}")
         return None, f"AI Error: {str(e)}"
+
+# 🚨 NAYA FUNCTION: Admin ke liye chat
+async def chat_with_ai_owner(user_msg):
+    if not openai_client and not groq_client:
+        return "AI Key missing."
+    
+    try:
+        if openai_client:
+            response = await openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful coding and system architecture assistant for the Owner of a Telegram OTP Bot. Keep answers short, technical, and in Hinglish. Suggest improvements for bot features."},
+                    {"role": "user", "content": user_msg}
+                ]
+            )
+            return response.choices[0].message.content
+        
+        elif groq_client:
+            response = groq_client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[
+                    {"role": "system", "content": "You are a helpful coding and system architecture assistant for the Owner of a Telegram OTP Bot. Keep answers short, technical, and in Hinglish. Suggest improvements for bot features."},
+                    {"role": "user", "content": user_msg}
+                ]
+            )
+            return response.choices[0].message.content
+            
+    except Exception as e:
+        return f"AI Error: {e}"
