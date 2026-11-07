@@ -1,4 +1,3 @@
-# Python 3.11 base image
 FROM python:3.11-slim
 
 # Set environment variables
@@ -37,9 +36,9 @@ WORKDIR /app
 # Copy requirements first (for caching)
 COPY requirements.txt .
 
-# Install Python dependencies
+# 🚨 Force upgrade pip and install requirements without cache
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir --upgrade -r requirements.txt
 
 # Install Playwright Browsers and system dependencies
 RUN playwright install chromium && \
