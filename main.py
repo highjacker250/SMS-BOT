@@ -1,6 +1,6 @@
 import asyncio
 
-# 🚨 COLAB FIX for Pyrogram (uvloop clash)
+# 🚨 COLAB FIX: Event loop create karo (Pyrogram/uvloop clash ke liye)
 asyncio.set_event_loop(asyncio.new_event_loop())
 
 import logging
@@ -41,7 +41,7 @@ async def copy_otp_callback(cq: CallbackQuery):
     await cq.answer(f"📋 OTP: {otp}\n\n(Manually copy karein)", show_alert=True)
 
 async def self_ping():
-    url = f"http://localhost:{config.PORT}/"
+    url = f"http://localhost:8081/"
     while True:
         await asyncio.sleep(600)
         try:
@@ -152,4 +152,4 @@ async def get_health():
     })
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=config.PORT)
+    uvicorn.run(app, host="0.0.0.0", port=8081)
