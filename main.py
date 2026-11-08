@@ -1,6 +1,6 @@
 import asyncio
 
-# 🚨 YEH SABSE UPAR HONA CHAHIYE (Pyrogram/uvloop fix)
+# 🚨 COLAB FIX: Event loop create karo (Pyrogram/uvloop error ke liye)
 try:
     asyncio.get_event_loop()
 except RuntimeError:
