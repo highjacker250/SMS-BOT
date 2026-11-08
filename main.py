@@ -1,10 +1,7 @@
 import asyncio
 
-# 🚨 COLAB FIX: Event loop create karo (Pyrogram/uvloop error ke liye)
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
+# 🚨 COLAB FIX for Pyrogram (uvloop clash)
+asyncio.set_event_loop(asyncio.new_event_loop())
 
 import logging
 import aiohttp
