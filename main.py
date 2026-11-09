@@ -1,14 +1,13 @@
 import asyncio
 
-# 🚨 COLAB FIX: Event loop create karo
+# COLAB FIX: fresh event loop before any other import
 asyncio.set_event_loop(asyncio.new_event_loop())
 
 import logging
 import aiohttp
 import os
-import base64
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 import uvicorn
 import config
@@ -33,21 +32,25 @@ dp = Dispatcher(storage=MemoryStorage())
 
 dp.include_routers(owner_router, admin_router, user_router)
 
+
 @dp.callback_query(lambda c: c.data and c.data.startswith("copy_otp_"))
 async def copy_otp_callback(cq: CallbackQuery):
     otp = cq.data.split("_")[2]
     await cq.answer(f"📋 OTP: {otp}\n\n(Manually copy karein)", show_alert=True)
 
+
 async def self_ping():
-    url = f"http://localhost:{config.PORT}/"
+    # port config se, hardcoded nahi
+    url = f"http://127.0.0.1:{config.PORT}/api/health"
     while True:
         await asyncio.sleep(600)
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=5) as resp:
                     pass
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug(f"self_ping failed: {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -64,7 +67,9 @@ async def lifespan(app: FastAPI):
     log.info("Shutting down...")
     await bot.session.close()
 
+
 app = FastAPI(lifespan=lifespan)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():
@@ -74,6 +79,7 @@ async def serve_dashboard():
     except Exception as e:
         return HTMLResponse(content=f"<h1>Error loading Dashboard: {e}</h1>", status_code=500)
 
+
 @app.get("/telegram", response_class=HTMLResponse)
 async def serve_telegram():
     try:
@@ -81,6 +87,7 @@ async def serve_telegram():
             return HTMLResponse(content=f.read())
     except Exception as e:
         return HTMLResponse(content=f"<h1>Error loading Telegram UI: {e}</h1>", status_code=500)
+
 
 @app.get("/mini_panel/{token}", response_class=HTMLResponse)
 async def serve_mini_panel(token: str):
@@ -93,18 +100,18 @@ async def serve_mini_panel(token: str):
     except Exception as e:
         return HTMLResponse(content=f"<h1>Error loading Mini Panel: {e}</h1>", status_code=500)
 
-# 🚨 NAYA API: LIVE BROWSER SCREENSHOT
+
 @app.get("/api/live_screenshot")
 async def get_live_screenshot():
     try:
         if os.path.exists("live_browser.png"):
             with open("live_browser.png", "rb") as f:
                 img_data = f.read()
-            return Response(content=img_data, media_type="image/png")
-        else:
-            return JSONResponse(content={"error": "No screenshot found"}, status_code=404)
+            return Response(content=img_data, media_type="image/png", headers={"Cache-Control": "no-store"})
+        return JSONResponse(content={"error": "No screenshot found"}, status_code=404)
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
 @app.get("/api/get_accounts")
 async def get_accounts():
@@ -115,16 +122,19 @@ async def get_accounts():
         result.append({
             "phone": phone,
             "status": acc.get("status", "unknown"),
-            "session": acc.get("session", "")[:15] + "..." if acc.get("session") else "No Session",
+            "session": (acc.get("session", "")[:15] + "...") if acc.get("session") else "No Session",
             "device_id": acc.get("device_id", "Unknown"),
-            "ai_task": f"Monitoring {phone}..."
+            "ai_task": f"Monitoring {phone}...",
+            "reset_time": acc.get("reset_time", 0),
         })
     return JSONResponse(content={"status": "success", "accounts": result})
+
 
 @app.get("/api/hunting_status")
 async def hunting_status():
     d = db.load_data()
     return JSONResponse(content={"enabled": d.get("hunting_enabled", True)})
+
 
 @app.post("/api/toggle_hunting")
 async def toggle_hunting():
@@ -133,16 +143,25 @@ async def toggle_hunting():
     db.save_data(d)
     return JSONResponse(content={"status": "success", "enabled": d["hunting_enabled"]})
 
+
 @app.get("/api/health")
 async def get_health():
     status = db.get_bot_status()
     d = db.load_data()
+    accounts = d.get("telegram_accounts", {})
+    active = sum(1 for a in accounts.values() if a.get("status") == "active")
+    total = len(accounts)
+    completion_rate = round((active / total) * 100, 1) if total else 0.0
     return JSONResponse(content={
         "task": status.get("task", "Idle"),
         "detail": status.get("detail", "Waiting..."),
-        "accounts_count": len(d.get("telegram_accounts", {})),
-        "working_proxies": len(d.get("working_proxies", []))
+        "accounts_count": total,
+        "active_accounts": active,
+        "working_proxies": len(d.get("working_proxies", [])),
+        "completion_rate": completion_rate,
+        "hunting_enabled": d.get("hunting_enabled", True),
     })
 
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    uvicorn.run(app, host="0.0.0.0", port=config.PORT)
