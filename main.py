@@ -92,6 +92,15 @@ async def serve_telegram():
         return HTMLResponse(content=f"<h1>Error loading Telegram UI: {e}</h1>", status_code=500)
 
 
+@app.get("/tg_panel", response_class=HTMLResponse)
+async def serve_tg_panel():
+    try:
+        with open("web_panel/templates/tg_panel.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except Exception as e:
+        return HTMLResponse(content=f"<h1>Error loading TG Panel: {e}</h1>", status_code=500)
+
+
 @app.get("/mini_panel/{token}", response_class=HTMLResponse)
 async def serve_mini_panel(token: str):
     d = db.load_data()
@@ -121,8 +130,44 @@ async def get_accounts():
             "device_id": acc.get("device_id", "Unknown"),
             "ai_task": f"Monitoring {phone}...",
             "reset_time": acc.get("reset_time", 0),
+            "otp_count": len(acc.get("otps", [])),
+            "last_otp_time": acc.get("otps", [{}])[0].get("time", 0) if acc.get("otps") else 0,
         })
     return JSONResponse(content={"status": "success", "accounts": result})
+
+
+@app.get("/api/get_account_otps")
+async def get_account_otps(phone: str):
+    d = db.load_data()
+    accounts = d.get("telegram_accounts", {})
+    acc = accounts.get(phone)
+    if not acc:
+        return JSONResponse(content={"status": "error", "reason": "Account not found", "otps": []}, status_code=404)
+    return JSONResponse(content={
+        "status": "success",
+        "phone": phone,
+        "account_status": acc.get("status", "unknown"),
+        "device_id": acc.get("device_id", "Unknown"),
+        "otps": acc.get("otps", []),
+    })
+
+
+@app.post("/api/clear_account_otps")
+async def clear_account_otps(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    phone = body.get("phone")
+    if not phone:
+        raise HTTPException(status_code=400, detail="phone required")
+    d = db.load_data()
+    acc = d.get("telegram_accounts", {}).get(phone)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account not found")
+    acc["otps"] = []
+    db.save_data(d)
+    return JSONResponse(content={"status": "success"})
 
 
 # =========================
@@ -142,17 +187,14 @@ async def toggle_hunting(request: Request):
         body = await request.json()
     except Exception:
         pass
-
     d = db.load_data()
     action = body.get("action") if isinstance(body, dict) else None
-
     if action == "start":
         d["hunting_enabled"] = True
     elif action == "stop":
         d["hunting_enabled"] = False
     else:
         d["hunting_enabled"] = not d.get("hunting_enabled", True)
-
     db.save_data(d)
     return JSONResponse(content={"status": "success", "enabled": d["hunting_enabled"]})
 
@@ -169,7 +211,6 @@ async def get_health():
     active = sum(1 for a in accounts.values() if a.get("status") == "active")
     total = len(accounts)
     completion_rate = round((active / total) * 100, 1) if total else 0.0
-
     return JSONResponse(content={
         "task": status.get("task", "Idle"),
         "detail": status.get("detail", "Waiting..."),
@@ -231,22 +272,15 @@ async def save_profile(request: Request):
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
-
     username = (body.get("username") or "").strip()
     email = (body.get("email") or "").strip()
     rank = (body.get("rank") or "").strip()
-
     if len(username) < 3:
         raise HTTPException(status_code=400, detail="Username must be >= 3 chars")
     if "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email")
-
     d = db.load_data()
-    d["owner_profile"] = {
-        "username": username,
-        "email": email,
-        "rank": rank or "S-RANK HUNTER",
-    }
+    d["owner_profile"] = {"username": username, "email": email, "rank": rank or "S-RANK HUNTER"}
     db.save_data(d)
     return JSONResponse(content={"status": "success", "profile": d["owner_profile"]})
 
@@ -268,13 +302,11 @@ async def save_settings(request: Request):
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
-
     poll = body.get("poll_interval", 3)
     try:
         poll = max(1, min(30, int(poll)))
     except Exception:
         poll = 3
-
     d = db.load_data()
     d["owner_settings"] = {
         "poll_interval": poll,
