@@ -18,398 +18,109 @@
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body { font-family: 'Roboto', -apple-system, sans-serif; background-color: var(--tg-bg-sidebar); color: var(--tg-text-white); height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; }
     ::-webkit-scrollbar { width: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-    .tg-chat-bg { background-color: var(--tg-bg-main); background-image: radial-gradient(#242f3d 1px, transparent 1px), radial-gradient(#1f2937 1px, transparent 1px); background-size: 32px 32px; background-position: 0 0, 16px 16px; }
     .top-header { height: 56px; background-color: var(--tg-bg-sidebar); border-bottom: 1px solid var(--tg-border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 40; flex-shrink: 0; }
+    .tabs { display: flex; background: #0e1621; border-bottom: 1px solid var(--tg-border); }
+    .tab { flex: 1; text-align: center; padding: 12px; font-size: 14px; font-weight: 500; color: var(--tg-text-grey); cursor: pointer; border-bottom: 2px solid transparent; }
+    .tab.active { color: var(--tg-accent-blue); border-bottom-color: var(--tg-accent-blue); }
     .app-container { flex: 1; display: flex; position: relative; overflow: hidden; }
-    .chat-list-panel { width: 100%; max-width: 100%; background-color: var(--tg-bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--tg-border); z-index: 10; height: 100%; }
-    @media (min-width: 768px) { .chat-list-panel { width: 360px; min-width: 340px; max-width: 400px; } }
-    .chat-view-panel { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--tg-bg-main); display: flex; flex-direction: column; z-index: 20; transform: translateX(100%); transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
-    @media (min-width: 768px) { .chat-view-panel { position: relative; transform: translateX(0); flex: 1; z-index: 10; } }
-    .chat-view-panel.mobile-active { transform: translateX(0); }
-    .chat-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; transition: background-color 0.15s ease; }
+    .chat-list-panel { width: 100%; max-width: 100%; background-color: var(--tg-bg-sidebar); display: flex; flex-direction: column; z-index: 10; height: 100%; overflow-y: auto; }
+    .chat-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; transition: 0.15s; border-bottom: 1px solid rgba(255,255,255,0.02); }
     .chat-item:hover { background-color: var(--tg-bg-hover); }
     .chat-item.active { background-color: var(--tg-bg-active); }
     .tg-avatar { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; color: #fff; flex-shrink: 0; }
     .status-pill { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; }
-    .tg-toast { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(0,0,0,0.85); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; z-index: 100; opacity: 0; pointer-events: none; transition: all 0.25s ease; }
-    .tg-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .empty-state { padding: 40px 20px; text-align: center; color: var(--tg-text-grey); font-size: 13px; }
-    .empty-state i { font-size: 28px; margin-bottom: 10px; display: block; opacity: 0.5; }
   </style>
 </head>
 <body>
-
   <header class="top-header">
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <div style="width:32px; height:32px; border-radius:50%; background:#229ed9; display:flex; align-items:center; justify-content:center; color:#fff;">
-          <i class="fa-solid fa-paper-plane" style="font-size:14px;"></i>
-        </div>
-        <div>
-          <div style="font-size:15px; font-weight:700; color:var(--tg-text-white); line-height:1.2;">TG Panel</div>
-          <div id="header-sub" style="font-size:11px; color:var(--tg-text-grey); display:flex; align-items:center; gap:5px;">
-            <span id="header-dot" style="width:7px; height:7px; border-radius:50%; background:var(--tg-text-grey); display:inline-block;"></span>
-            <span id="header-sub-text">Connecting...</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div style="display:flex; align-items:center; gap:10px;">
-      <a href="/" title="Control Panel" style="color:var(--tg-text-grey); font-size:13px; text-decoration:none; display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:6px; background:rgba(255,255,255,0.06);">
-        <i class="fa-solid fa-gauge"></i><span>Panel</span>
-      </a>
-      <button id="hunting-toggle-btn" style="padding:6px 14px; border-radius:18px; border:none; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px; color:#fff; background:var(--tg-text-grey); transition:all 0.2s;">
-        <i class="fa-solid fa-power-off"></i>
-        <span id="hunting-status-text">…</span>
-      </button>
+    <div style="font-size:15px; font-weight:700;">Mini Panel</div>
+    <div style="display:flex; gap:10px;">
+      <a href="/" style="color:var(--tg-text-grey); text-decoration:none; background:rgba(255,255,255,0.06); padding:6px 10px; border-radius:6px; font-size:12px;">Control Panel</a>
+      <button id="hunt-btn" style="padding:6px 14px; border-radius:18px; border:none; font-size:12px; font-weight:700; color:#fff; background:var(--tg-text-grey);">…</button>
     </div>
   </header>
 
-  <main class="app-container">
-    <section class="chat-list-panel" id="chat-list-section">
-      <div style="padding:10px 14px; border-bottom:1px solid var(--tg-border);">
-        <div style="background-color:#1c2733; border-radius:20px; display:flex; align-items:center; padding:6px 14px; gap:10px;">
-          <i class="fa-solid fa-magnifying-glass" style="color:var(--tg-text-grey); font-size:13px;"></i>
-          <input type="text" id="account-search-input" placeholder="Search accounts or phone..." style="background:none; border:none; outline:none; color:var(--tg-text-white); font-size:13px; width:100%; font-family:inherit;" />
-        </div>
-      </div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('tg', this)">TG Accounts</div>
+    <div class="tab" onclick="switchTab('target', this)">Target Accounts</div>
+  </div>
 
-      <div id="accounts-container" style="flex:1; overflow-y:auto;"></div>
+  <div class="app-container" id="tg-list-container">
+    <div class="chat-list-panel" id="tg-accounts-list"></div>
+  </div>
 
-      <div style="padding:10px 16px; border-top:1px solid var(--tg-border); font-size:11px; color:var(--tg-text-grey); display:flex; justify-content:space-between; align-items:center; background:#0c131c;">
-        <span>Accounts: <b id="total-accounts-count" style="color:#fff;">0</b></span>
-        <span style="color:var(--tg-accent-blue);"><i class="fa-solid fa-shield-halved"></i> Real-time</span>
-      </div>
-    </section>
-
-    <section class="chat-view-panel" id="chat-view-section">
-      <div style="height:56px; background-color:var(--tg-bg-sidebar); border-bottom:1px solid var(--tg-border); display:flex; align-items:center; justify-content:space-between; padding:0 14px; flex-shrink:0;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <button id="chat-back-btn" style="background:none; border:none; color:var(--tg-text-white); font-size:18px; cursor:pointer; padding:6px 8px; border-radius:50%;">
-            <i class="fa-solid fa-arrow-left"></i>
-          </button>
-          <div id="chat-header-avatar" class="tg-avatar" style="width:38px; height:38px; font-size:14px; background:#5288c1;">?</div>
-          <div>
-            <div id="chat-header-name" style="font-size:14px; font-weight:700; color:var(--tg-text-white);">Select account</div>
-            <div id="chat-header-status" style="font-size:11px; color:var(--tg-text-grey);">—</div>
-          </div>
-        </div>
-        <div style="display:flex; align-items:center; gap:14px; color:var(--tg-text-grey); font-size:15px;">
-          <button id="btn-clear-otps" title="Clear OTPs" style="background:none; border:none; color:inherit; cursor:pointer;"><i class="fa-solid fa-broom"></i></button>
-          <button id="btn-refresh-chat" title="Refresh" style="background:none; border:none; color:inherit; cursor:pointer;"><i class="fa-solid fa-rotate"></i></button>
-        </div>
-      </div>
-
-      <div id="messages-body" class="tg-chat-bg" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px;">
-        <div class="empty-state"><i class="fa-solid fa-comment-slash"></i>Select an account to view OTPs</div>
-      </div>
-    </section>
-  </main>
-
-  <div id="tg-toast" class="tg-toast">Copied!</div>
+  <div class="app-container" id="target-list-container" style="display:none;">
+    <div class="chat-list-panel" id="target-accounts-list"></div>
+  </div>
 
   <script>
-    (function () {
-      'use strict';
-      const state = {
-        accounts: [],
-        selectedPhone: null,
-        searchQuery: '',
-        otps: [],
-        hunting: false,
-        pollTimer: null,
-        otpPollTimer: null,
-        lastSeenOtpTime: 0
-      };
+    function switchTab(tab, el) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('tg-list-container').style.display = tab === 'tg' ? 'block' : 'none';
+      document.getElementById('target-list-container').style.display = tab === 'target' ? 'block' : 'none';
+      if (tab === 'tg') fetchTGAccounts();
+      else fetchTargetAccounts();
+    }
 
-      const $ = (id) => document.getElementById(id);
-      let audioCtx = null;
-
-      function playBeep(freq) {
-        try {
-          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const now = audioCtx.currentTime;
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          osc.connect(gain); gain.connect(audioCtx.destination);
-          osc.frequency.setValueAtTime(freq || 600, now);
-          gain.gain.setValueAtTime(0.08, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-          osc.start(now); osc.stop(now + 0.15);
-        } catch (e) {}
-      }
-
-      window.addEventListener('pointerdown', () => {
-        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      }, { once: true });
-
-      let toastTimer = null;
-      function showToast(msg) {
-        const t = $('tg-toast');
-        t.textContent = msg;
-        t.classList.add('show');
-        if (toastTimer) clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
-      }
-
-      function escapeHTML(s) {
-        if (s === undefined || s === null) return '';
-        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-      }
-
-      function statusMeta(status) {
-        if (status === 'active') return { label: 'Active', color: '#4fae4e', bg: 'rgba(79,174,78,0.15)' };
-        if (status === 'waiting_7_days') return { label: 'Waiting 7 Days', color: '#e5a93c', bg: 'rgba(229,169,60,0.15)' };
-        if (status === 'failed') return { label: 'Failed', color: '#e55353', bg: 'rgba(229,83,83,0.15)' };
-        if (status === 'logging_in') return { label: 'Logging In', color: '#e5a93c', bg: 'rgba(229,169,60,0.15)' };
-        return { label: status || 'Unknown', color: '#7e8c99', bg: 'rgba(126,140,153,0.15)' };
-      }
-
-      function avatarColor(phone) {
-        const colors = ['#5288c1','#d97724','#c73a4b','#4fae4e','#a855f7','#e5a93c','#0ea5e9','#e11d48'];
-        let hash = 0;
-        for (let i = 0; i < phone.length; i++) hash = (hash * 31 + phone.charCodeAt(i)) | 0;
-        return colors[Math.abs(hash) % colors.length];
-      }
-
-      function formatTime(ts) {
-        if (!ts) return '—';
-        const d = new Date(ts * 1000);
-        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      }
-
-      function renderChatList() {
-        const q = state.searchQuery.toLowerCase().trim();
-        const filtered = state.accounts.filter(a => !q || a.phone.toLowerCase().includes(q) || (a.status || '').toLowerCase().includes(q));
-        $('total-accounts-count').textContent = state.accounts.length;
-
-        const container = $('accounts-container');
-        if (!filtered.length) {
-          container.innerHTML = `<div class="empty-state"><i class="fa-solid fa-user-slash"></i>${state.accounts.length ? 'No match for "'+escapeHTML(q)+'"' : 'No accounts yet. Use /tglogin in Telegram bot.'}</div>`;
+    async function fetchTGAccounts() {
+      try {
+        const res = await fetch('/api/get_accounts?v=' + Date.now());
+        const data = await res.json();
+        const box = document.getElementById('tg-accounts-list');
+        if (!data.accounts || data.accounts.length === 0) {
+          box.innerHTML = `<div class="empty-state">No Telegram accounts found.</div>`;
           return;
         }
-
-        container.innerHTML = filtered.map(acc => {
-          const meta = statusMeta(acc.status);
-          const isActive = acc.phone === state.selectedPhone;
-          const lastTime = acc.last_otp_time ? formatTime(acc.last_otp_time) : '—';
-          const snippet = acc.otp_count ? `${acc.otp_count} OTP${acc.otp_count>1?'s':''} received` : (acc.device_id !== 'Unknown' ? `Device ${acc.device_id.slice(0,8)}` : 'No OTPs yet');
-          const initials = (acc.phone || '?').replace(/\D/g,'').slice(-2) || '??';
-          return `
-            <div class="chat-item ${isActive ? 'active' : ''}" data-phone="${escapeHTML(acc.phone)}">
-              <div class="tg-avatar" style="background:${avatarColor(acc.phone)}">${initials}</div>
-              <div style="flex:1; margin-left:14px; min-width:0;">
-                <div style="display:flex; justify-content:space-between; align-items:baseline;">
-                  <span style="font-weight:700; font-size:14px; color:var(--tg-text-white); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHTML(acc.phone)}</span>
-                  <span style="font-size:11px; color:var(--tg-text-grey); margin-left:8px;">${lastTime}</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
-                  <div style="font-size:12px; color:var(--tg-text-grey); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${escapeHTML(snippet)}</div>
-                  ${acc.otp_count > 0 ? `<span style="background:var(--tg-accent-blue); color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:12px; min-width:20px; text-align:center;">${acc.otp_count}</span>` : ''}
-                </div>
-                <div><span class="status-pill" style="background:${meta.bg}; color:${meta.color};"><span style="width:5px; height:5px; border-radius:50%; background:${meta.color}; display:inline-block;"></span>${escapeHTML(meta.label)}</span></div>
-              </div>
-            </div>
-          `;
-        }).join('');
-
-        container.querySelectorAll('.chat-item').forEach(el => {
-          el.addEventListener('click', () => selectAccount(el.getAttribute('data-phone')));
-        });
-      }
-
-      function selectAccount(phone) {
-        state.selectedPhone = phone;
-        state.lastSeenOtpTime = 0;
-        const acc = state.accounts.find(a => a.phone === phone);
-        if (acc) {
-          $('chat-header-name').textContent = acc.phone;
-          $('chat-header-avatar').textContent = (acc.phone || '?').replace(/\D/g,'').slice(-2) || '??';
-          $('chat-header-avatar').style.background = avatarColor(acc.phone);
-          const meta = statusMeta(acc.status);
-          $('chat-header-status').textContent = meta.label;
-          $('chat-header-status').style.color = meta.color;
-        }
-        $('chat-view-section').classList.add('mobile-active');
-        renderChatList();
-        fetchOtps(phone);
-        if (state.otpPollTimer) clearInterval(state.otpPollTimer);
-        state.otpPollTimer = setInterval(() => { if (state.selectedPhone) fetchOtps(state.selectedPhone); }, 5000);
-      }
-
-      function renderOtps(otps) {
-        const body = $('messages-body');
-        if (!otps || !otps.length) {
-          body.innerHTML = `<div class="empty-state"><i class="fa-solid fa-inbox"></i>No OTPs yet for this account.<br><br><span style="font-size:11px;">OTPs will appear here in real-time when the scanner catches them.</span></div>`;
-          return;
-        }
-        const bubbles = otps.map(otp => `
-          <div style="align-self:flex-start; max-width:92%; margin:6px 0;">
-            <div style="background-color:var(--tg-incoming-bubble); border:1px solid #2b3b4f; border-radius:14px; border-top-left-radius:3px; padding:14px 16px; box-shadow:0 3px 12px rgba(0,0,0,0.3);">
-              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="background:var(--tg-accent-blue); color:#fff; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px;"><i class="fa-solid fa-shield-halved"></i></span>
-                  <span style="font-weight:700; font-size:13px; color:#fff;">OTP RECEIVED</span>
-                </div>
-                <span style="font-size:10px; color:var(--tg-text-grey);">${formatTime(otp.time)}</span>
-              </div>
-              <div style="font-size:12px; font-family:monospace; display:flex; flex-direction:column; gap:6px; color:#d2d6dc;">
-                <div><span style="color:var(--tg-text-grey);">SERVICE:</span> <b style="color:var(--tg-accent-blue);">${escapeHTML(otp.service || 'Unknown')}</b></div>
-                <div><span style="color:var(--tg-text-grey);">RENT ID:</span> <b style="color:#fff;">${escapeHTML(otp.rent_id || '—')}</b></div>
-              </div>
-              <div style="margin-top:12px; background:rgba(0,0,0,0.3); border-radius:8px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; border:1px dashed var(--tg-accent-blue);">
-                <div>
-                  <div style="font-size:10px; text-transform:uppercase; color:var(--tg-text-grey); letter-spacing:1px;">CODE</div>
-                  <div style="font-size:24px; font-weight:800; letter-spacing:4px; color:#fff;">${escapeHTML(otp.otp)}</div>
-                </div>
-                <button class="otp-copy-btn" data-otp="${escapeHTML(otp.otp)}" style="padding:10px 18px; border-radius:8px; background:var(--tg-accent-blue); border:none; color:#fff; font-weight:700; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                  <i class="fa-solid fa-copy"></i><span>COPY</span>
-                </button>
-              </div>
-              ${otp.text ? `<div style="margin-top:8px; font-size:10px; color:var(--tg-text-grey); font-family:monospace; word-break:break-word;">${escapeHTML(otp.text)}</div>` : ''}
+        box.innerHTML = data.accounts.map(acc => `
+          <div class="chat-item">
+            <div class="tg-avatar" style="background:#5288c1">${acc.phone.slice(-2)}</div>
+            <div style="margin-left:14px; flex:1;">
+              <div style="font-weight:700; font-size:14px;">${acc.phone}</div>
+              <div style="font-size:12px; color:var(--tg-text-grey);">${acc.otp_count} OTPs | Device: ${acc.device_id.slice(0,6)}</div>
+              <span class="status-pill" style="background:${acc.status==='active'?'rgba(79,174,78,0.2)':'rgba(229,83,83,0.2)'}; color:${acc.status==='active'?'#4fae4e':'#e55353'};">${acc.status.toUpperCase()}</span>
             </div>
           </div>
         `).join('');
-        body.innerHTML = `<div style="align-self:center; margin-bottom:8px;"><span style="background:rgba(14,22,33,0.85); color:var(--tg-text-grey); font-size:11px; padding:3px 12px; border-radius:12px;">OTP HISTORY</span></div>${bubbles}`;
-        body.querySelectorAll('.otp-copy-btn').forEach(b => {
-          b.addEventListener('click', () => {
-            const code = b.getAttribute('data-otp');
-            navigator.clipboard.writeText(code).then(() => {
-              playBeep(800);
-              showToast('OTP ' + code + ' copied');
-              const orig = b.innerHTML;
-              b.innerHTML = '<i class="fa-solid fa-check"></i> COPIED';
-              b.style.background = 'var(--tg-green)';
-              setTimeout(() => { b.innerHTML = orig; b.style.background = 'var(--tg-accent-blue)'; }, 1800);
-            }).catch(() => showToast('OTP: ' + code));
-          });
-        });
-        body.scrollTop = body.scrollHeight;
+      } catch(e) { console.error(e); }
+    }
 
-        // Beep on new OTP
-        const latest = otps[0]?.time || 0;
-        if (latest > state.lastSeenOtpTime && state.lastSeenOtpTime > 0) playBeep(900);
-        state.lastSeenOtpTime = latest;
-      }
-
-      async function fetchAccounts() {
-        try {
-          const res = await fetch('/api/get_accounts', { cache: 'no-store' });
-          const data = await res.json();
-          state.accounts = (data.accounts || []).sort((a, b) => (b.last_otp_time || 0) - (a.last_otp_time || 0));
-          renderChatList();
-        } catch (e) {
-          console.error('fetchAccounts', e);
+    async function fetchTargetAccounts() {
+      try {
+        const res = await fetch('/api/get_target_accounts?v=' + Date.now());
+        const data = await res.json();
+        const box = document.getElementById('target-accounts-list');
+        if (!data.targets || data.targets.length === 0) {
+          box.innerHTML = `<div class="empty-state">No Target accounts (PayPal/FB) found.</div>`;
+          return;
         }
-      }
+        box.innerHTML = data.targets.map(acc => `
+          <div class="chat-item">
+            <div class="tg-avatar" style="background:#d97724">${acc.platform.slice(0,2).toUpperCase()}</div>
+            <div style="margin-left:14px; flex:1;">
+              <div style="font-weight:700; font-size:14px;">${acc.phone}</div>
+              <div style="font-size:12px; color:var(--tg-text-grey);">Platform: ${acc.platform.toUpperCase()}</div>
+              <span class="status-pill" style="background:${acc.status==='active'?'rgba(79,174,78,0.2)':'rgba(229,83,83,0.2)'}; color:${acc.status==='active'?'#4fae4e':'#e55353'};">${acc.status.toUpperCase()}</span>
+            </div>
+          </div>
+        `).join('');
+      } catch(e) { console.error(e); }
+    }
 
-      async function fetchOtps(phone) {
-        try {
-          const res = await fetch('/api/get_account_otps?phone=' + encodeURIComponent(phone), { cache: 'no-store' });
-          const data = await res.json();
-          if (data.status === 'success') {
-            state.otps = data.otps || [];
-            renderOtps(state.otps);
-          }
-        } catch (e) {
-          console.error('fetchOtps', e);
-        }
-      }
+    document.getElementById('hunt-btn').onclick = async () => {
+      const res = await fetch('/api/toggle_hunting', {method: 'POST', body: JSON.stringify({}), headers: {'Content-Type': 'application/json'}});
+      const data = await res.json();
+      document.getElementById('hunt-btn').innerText = data.enabled ? "Hunting ON" : "Hunting OFF";
+      document.getElementById('hunt-btn').style.background = data.enabled ? "var(--tg-green)" : "var(--tg-red)";
+    };
 
-      async function fetchHunting() {
-        try {
-          const res = await fetch('/api/hunting_status', { cache: 'no-store' });
-          const data = await res.json();
-          state.hunting = !!data.enabled;
-          updateHuntingUI();
-        } catch (e) {}
-      }
-
-      function updateHuntingUI() {
-        const btn = $('hunting-toggle-btn');
-        const txt = $('hunting-status-text');
-        const dot = $('header-dot');
-        const sub = $('header-sub-text');
-        if (state.hunting) {
-          btn.style.background = 'var(--tg-green)';
-          txt.textContent = 'Hunting ON';
-          dot.style.background = 'var(--tg-green)';
-          sub.textContent = 'Live';
-        } else {
-          btn.style.background = 'var(--tg-red)';
-          txt.textContent = 'Hunting OFF';
-          dot.style.background = 'var(--tg-red)';
-          sub.textContent = 'Paused';
-        }
-      }
-
-      async function toggleHunting() {
-        const next = !state.hunting;
-        try {
-          const res = await fetch('/api/toggle_hunting', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: next ? 'start' : 'stop' })
-          });
-          const data = await res.json();
-          state.hunting = !!data.enabled;
-        } catch (e) {
-          state.hunting = next;
-        }
-        updateHuntingUI();
-        playBeep(state.hunting ? 800 : 400);
-        showToast(state.hunting ? 'Hunting ON' : 'Hunting OFF');
-      }
-
-      async function clearOtps() {
-        if (!state.selectedPhone) return;
-        if (!confirm('Clear all OTPs for ' + state.selectedPhone + '?')) return;
-        try {
-          await fetch('/api/clear_account_otps', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: state.selectedPhone })
-          });
-          showToast('OTPs cleared');
-          fetchOtps(state.selectedPhone);
-          fetchAccounts();
-        } catch (e) { showToast('Clear failed'); }
-      }
-
-      // Init
-      document.addEventListener('DOMContentLoaded', () => {
-        $('hunting-toggle-btn').addEventListener('click', toggleHunting);
-        $('account-search-input').addEventListener('input', (e) => {
-          state.searchQuery = e.target.value;
-          renderChatList();
-        });
-        $('chat-back-btn').addEventListener('click', () => {
-          $('chat-view-section').classList.remove('mobile-active');
-          if (state.otpPollTimer) { clearInterval(state.otpPollTimer); state.otpPollTimer = null; }
-        });
-        $('btn-refresh-chat').addEventListener('click', () => {
-          if (state.selectedPhone) fetchOtps(state.selectedPhone);
-          fetchAccounts();
-          showToast('Refreshed');
-        });
-        $('btn-clear-otps').addEventListener('click', clearOtps);
-
-        fetchAccounts();
-        fetchHunting();
-        state.pollTimer = setInterval(fetchAccounts, 5000);
-        setInterval(fetchHunting, 5000);
-
-        // Auto-select first account on desktop
-        setTimeout(() => {
-          if (window.innerWidth >= 768 && state.accounts.length > 0) {
-            selectAccount(state.accounts[0].phone);
-          }
-        }, 800);
-      });
-    })();
+    fetchTGAccounts();
+    fetch('/api/hunting_status').then(r=>r.json()).then(d=>{
+      document.getElementById('hunt-btn').innerText = d.enabled ? "Hunting ON" : "Hunting OFF";
+      document.getElementById('hunt-btn').style.background = d.enabled ? "var(--tg-green)" : "var(--tg-red)";
+    });
   </script>
 </body>
 </html>
