@@ -25,8 +25,9 @@ async def admin_ai_chat_prompt(cq: CallbackQuery, state: FSMContext):
 @admin_router.message(S.ai_chat)
 async def admin_ai_chat_reply(msg: Message, state: FSMContext):
     user_text = msg.text
-    status = await msg.answer("🧠 AI is thinking...")
+    status = await msg.answer("🧠 AI is thinking... (Checking Groq, DeepSeek, Gemini...)")
     
+    # 🚨 Ye naye fallback wale AI ko call karega
     reply = await chat_with_ai_owner(user_text)
     
     await status.edit_text(
