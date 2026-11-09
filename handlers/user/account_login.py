@@ -83,11 +83,19 @@ async def get_manual_otp(msg: Message, state: FSMContext):
         db.save_data(d)
         
         await state.clear()
+        
+        # 🚨 NAYA: Manage Devices button
+        kb_dev = InlineKeyboardMarkup(inline_keyboard=[
+            [btn("Manage Devices", f"user:devices:{data['phone']}", "📱")],
+            [btn("Main Menu", "user:main_menu", "🏠")]
+        ])
+        
         await status.edit_text(
             f"✅ <b>Login Successful!</b>\n\n"
             f"Account: <code>{data['phone']}</code>\n"
             f"Platform: {data['platform'].upper()}\n\n"
             f"🔗 <a href='{config.WEB_URL}/mini_panel/{token}'>Click Here to Access Panel</a>",
+            reply_markup=kb_dev,
             parse_mode="HTML"
         )
     else:
