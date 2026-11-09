@@ -1,6 +1,4 @@
 import asyncio
-
-# COLAB FIX: fresh event loop before any other import
 asyncio.set_event_loop(asyncio.new_event_loop())
 
 import logging
@@ -29,7 +27,6 @@ log = logging.getLogger("Main")
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-
 dp.include_routers(owner_router, admin_router, user_router)
 
 
@@ -51,6 +48,16 @@ async def self_ping():
             log.debug(f"self_ping failed: {e}")
 
 
+async def _db_flush_loop():
+    while True:
+        # 🚨 FIX: 3 sec se badhakar 60 sec kiya taaki PATCH spam na ho
+        await asyncio.sleep(60) 
+        try:
+            db.flush_pending()
+        except Exception as e:
+            log.warning(f"db flush failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Starting Bot Polling and Scanners...")
@@ -62,6 +69,7 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(reset_watchdog_loop(bot))
     asyncio.create_task(proxy_scanner_loop())
     asyncio.create_task(self_ping())
+    asyncio.create_task(_db_flush_loop())
     yield
     log.info("Shutting down...")
     await bot.session.close()
@@ -70,17 +78,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# =========================
-# HTML ROUTES
-# =========================
-
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():
     try:
         with open("web_panel/templates/index.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     except Exception as e:
-        return HTMLResponse(content=f"<h1>Error loading Dashboard: {e}</h1>", status_code=500)
+        return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
 
 
 @app.get("/telegram", response_class=HTMLResponse)
@@ -89,7 +93,7 @@ async def serve_telegram():
         with open("web_panel/templates/telegram.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     except Exception as e:
-        return HTMLResponse(content=f"<h1>Error loading Telegram UI: {e}</h1>", status_code=500)
+        return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
 
 
 @app.get("/tg_panel", response_class=HTMLResponse)
@@ -98,7 +102,7 @@ async def serve_tg_panel():
         with open("web_panel/templates/tg_panel.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     except Exception as e:
-        return HTMLResponse(content=f"<h1>Error loading TG Panel: {e}</h1>", status_code=500)
+        return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
 
 
 @app.get("/mini_panel/{token}", response_class=HTMLResponse)
@@ -110,19 +114,15 @@ async def serve_mini_panel(token: str):
         with open("web_panel/templates/mini_panel.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read().replace("{{ token }}", token))
     except Exception as e:
-        return HTMLResponse(content=f"<h1>Error loading Mini Panel: {e}</h1>", status_code=500)
+        return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
 
-
-# =========================
-# API: ACCOUNTS
-# =========================
 
 @app.get("/api/get_accounts")
 async def get_accounts():
     d = db.load_data()
-    accounts = d.get("telegram_accounts", {})
     result = []
-    for phone, acc in accounts.items():
+    for phone, acc in d.get("telegram_accounts", {}).items():
+        otps = acc.get("otps", [])
         result.append({
             "phone": phone,
             "status": acc.get("status", "unknown"),
@@ -130,8 +130,8 @@ async def get_accounts():
             "device_id": acc.get("device_id", "Unknown"),
             "ai_task": f"Monitoring {phone}...",
             "reset_time": acc.get("reset_time", 0),
-            "otp_count": len(acc.get("otps", [])),
-            "last_otp_time": acc.get("otps", [{}])[0].get("time", 0) if acc.get("otps") else 0,
+            "otp_count": len(otps),
+            "last_otp_time": otps[0].get("time", 0) if otps else 0,
         })
     return JSONResponse(content={"status": "success", "accounts": result})
 
@@ -139,8 +139,7 @@ async def get_accounts():
 @app.get("/api/get_account_otps")
 async def get_account_otps(phone: str):
     d = db.load_data()
-    accounts = d.get("telegram_accounts", {})
-    acc = accounts.get(phone)
+    acc = d.get("telegram_accounts", {}).get(phone)
     if not acc:
         return JSONResponse(content={"status": "error", "reason": "Account not found", "otps": []}, status_code=404)
     return JSONResponse(content={
@@ -166,18 +165,13 @@ async def clear_account_otps(request: Request):
     if not acc:
         raise HTTPException(status_code=404, detail="Account not found")
     acc["otps"] = []
-    db.save_data(d)
+    db.save_data(d, force=True)
     return JSONResponse(content={"status": "success"})
 
 
-# =========================
-# API: HUNTING
-# =========================
-
 @app.get("/api/hunting_status")
 async def hunting_status():
-    d = db.load_data()
-    return JSONResponse(content={"enabled": d.get("hunting_enabled", True)})
+    return JSONResponse(content={"enabled": db.load_data().get("hunting_enabled", True)})
 
 
 @app.post("/api/toggle_hunting")
@@ -195,13 +189,9 @@ async def toggle_hunting(request: Request):
         d["hunting_enabled"] = False
     else:
         d["hunting_enabled"] = not d.get("hunting_enabled", True)
-    db.save_data(d)
+    db.save_data(d, force=True)
     return JSONResponse(content={"status": "success", "enabled": d["hunting_enabled"]})
 
-
-# =========================
-# API: HEALTH
-# =========================
 
 @app.get("/api/health")
 async def get_health():
@@ -223,14 +213,9 @@ async def get_health():
     })
 
 
-# =========================
-# API: ACTIVITY FEED
-# =========================
-
 @app.get("/api/activity_feed")
 async def activity_feed():
-    feed = db.get_activity_feed()
-    return JSONResponse(content={"status": "success", "feed": feed})
+    return JSONResponse(content={"status": "success", "feed": db.get_activity_feed()})
 
 
 @app.post("/api/clear_feed")
@@ -238,10 +223,6 @@ async def clear_feed():
     db.clear_activity_feed()
     return JSONResponse(content={"status": "success"})
 
-
-# =========================
-# API: LIVE SCREENSHOT
-# =========================
 
 @app.get("/api/live_screenshot")
 async def get_live_screenshot():
@@ -255,15 +236,9 @@ async def get_live_screenshot():
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-# =========================
-# API: PROFILE
-# =========================
-
 @app.get("/api/get_profile")
 async def get_profile():
-    d = db.load_data()
-    profile = d.get("owner_profile", {})
-    return JSONResponse(content={"status": "success", "profile": profile})
+    return JSONResponse(content={"status": "success", "profile": db.load_data().get("owner_profile", {})})
 
 
 @app.post("/api/save_profile")
@@ -271,7 +246,7 @@ async def save_profile(request: Request):
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        raise HTTPException(status_code=400, detail="Invalid JSON")
     username = (body.get("username") or "").strip()
     email = (body.get("email") or "").strip()
     rank = (body.get("rank") or "").strip()
@@ -281,19 +256,13 @@ async def save_profile(request: Request):
         raise HTTPException(status_code=400, detail="Invalid email")
     d = db.load_data()
     d["owner_profile"] = {"username": username, "email": email, "rank": rank or "S-RANK HUNTER"}
-    db.save_data(d)
+    db.save_data(d, force=True)
     return JSONResponse(content={"status": "success", "profile": d["owner_profile"]})
 
 
-# =========================
-# API: SETTINGS
-# =========================
-
 @app.get("/api/get_settings")
 async def get_settings():
-    d = db.load_data()
-    settings = d.get("owner_settings", {})
-    return JSONResponse(content={"status": "success", "settings": settings})
+    return JSONResponse(content={"status": "success", "settings": db.load_data().get("owner_settings", {})})
 
 
 @app.post("/api/save_settings")
@@ -301,7 +270,7 @@ async def save_settings(request: Request):
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        raise HTTPException(status_code=400, detail="Invalid JSON")
     poll = body.get("poll_interval", 3)
     try:
         poll = max(1, min(30, int(poll)))
@@ -314,7 +283,7 @@ async def save_settings(request: Request):
         "discord_webhook": (body.get("discord_webhook") or "").strip(),
         "api_base": (body.get("api_base") or "/api").strip(),
     }
-    db.save_data(d)
+    db.save_data(d, force=True)
     return JSONResponse(content={"status": "success", "settings": d["owner_settings"]})
 
 
