@@ -3,7 +3,7 @@ import logging
 import time
 import random
 from pyrogram import Client
-from pyrogram.errors import SessionPasswordNeededError, FloodWait, PhoneCodeInvalid, RPCError, PhoneCodeExpired
+from pyrogram.errors import SessionPasswordNeeded, FloodWait, PhoneCodeInvalid, RPCError, PhoneCodeExpired
 from pyrogram.enums import SentCodeType
 from pyrogram.raw.functions.account import GetAuthorizations
 import config
@@ -57,7 +57,7 @@ def get_proxy(d, attempt=0):
         except: return None
     return None
 
-# 🚨 NAYA FUNCTION: Manage Devices (Sirf dikhane ke liye)
+# 🚨 NAYA FUNCTION: Manage Devices (Pyrogram Version)
 async def get_user_devices(phone: str):
     d = db.load_data()
     acc = d.get("telegram_accounts", {}).get(phone)
@@ -284,4 +284,4 @@ async def complete_user_login(phone_number, phone_code_hash, otp=None, password=
     except Exception as e:
         if app and app.is_connected: await app.disconnect()
         if phone_number in USER_LOGIN_CLIENTS: del USER_LOGIN_CLIENTS[phone_number]
-        return {"status": "failed", "reason": str(e)}
+        return {"status": "failed", "reason": str(e)}2
