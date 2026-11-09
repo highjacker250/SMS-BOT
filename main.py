@@ -1,13 +1,15 @@
 import asyncio
 
-# 🚨 COLAB FIX: Event loop create karo (Pyrogram/uvloop clash ke liye)
+# 🚨 COLAB FIX: Event loop create karo
 asyncio.set_event_loop(asyncio.new_event_loop())
 
 import logging
 import aiohttp
+import os
+import base64
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 import uvicorn
 import config
 
@@ -15,12 +17,9 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery
 
-# 🚨 Router Imports
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.owner import owner_router
-
-# 🚨 Background Services
 from core.scanner import start_scanner, backup_scanner, whatsapp_scanner
 from services.telegram_automation import auto_hunter_loop, reset_watchdog_loop
 from services.proxy_manager import proxy_scanner_loop
@@ -34,14 +33,13 @@ dp = Dispatcher(storage=MemoryStorage())
 
 dp.include_routers(owner_router, admin_router, user_router)
 
-# 🚨 Callback handler for OTP Copy (scanner ke liye)
 @dp.callback_query(lambda c: c.data and c.data.startswith("copy_otp_"))
 async def copy_otp_callback(cq: CallbackQuery):
     otp = cq.data.split("_")[2]
     await cq.answer(f"📋 OTP: {otp}\n\n(Manually copy karein)", show_alert=True)
 
 async def self_ping():
-    url = f"http://localhost:8081/"
+    url = f"http://localhost:{config.PORT}/"
     while True:
         await asyncio.sleep(600)
         try:
@@ -74,8 +72,7 @@ async def serve_dashboard():
         with open("web_panel/templates/index.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     except Exception as e:
-        log.error(f"Dashboard HTML error: {e}")
-        return HTMLResponse(content="<h1>Error loading Dashboard</h1>", status_code=500)
+        return HTMLResponse(content=f"<h1>Error loading Dashboard: {e}</h1>", status_code=500)
 
 @app.get("/telegram", response_class=HTMLResponse)
 async def serve_telegram():
@@ -83,8 +80,7 @@ async def serve_telegram():
         with open("web_panel/templates/telegram.html", "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     except Exception as e:
-        log.error(f"Telegram HTML error: {e}")
-        return HTMLResponse(content="<h1>Error loading Telegram UI</h1>", status_code=500)
+        return HTMLResponse(content=f"<h1>Error loading Telegram UI: {e}</h1>", status_code=500)
 
 @app.get("/mini_panel/{token}", response_class=HTMLResponse)
 async def serve_mini_panel(token: str):
@@ -97,21 +93,18 @@ async def serve_mini_panel(token: str):
     except Exception as e:
         return HTMLResponse(content=f"<h1>Error loading Mini Panel: {e}</h1>", status_code=500)
 
-@app.get("/api/user_accounts/{token}")
-async def get_user_accounts(token: str):
-    d = db.load_data()
-    if token not in d.get("mini_tokens", {}):
-        return JSONResponse(content={"error": "Invalid"}, status_code=403)
-    uid = d["mini_tokens"][token]
-    accounts = []
-    for phone, acc in d.get("target_accounts", {}).items():
-        if acc.get("user_id") == uid:
-            accounts.append({
-                "platform": acc.get("platform", "Unknown"),
-                "username": phone,
-                "status": acc.get("status", "Unknown")
-            })
-    return JSONResponse(content={"accounts": accounts})
+# 🚨 NAYA API: LIVE BROWSER SCREENSHOT
+@app.get("/api/live_screenshot")
+async def get_live_screenshot():
+    try:
+        if os.path.exists("live_browser.png"):
+            with open("live_browser.png", "rb") as f:
+                img_data = f.read()
+            return Response(content=img_data, media_type="image/png")
+        else:
+            return JSONResponse(content={"error": "No screenshot found"}, status_code=404)
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.get("/api/get_accounts")
 async def get_accounts():
