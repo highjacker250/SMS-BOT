@@ -323,4 +323,98 @@ async def user_save_name_done(msg: Message, state: FSMContext):
     user.setdefault("saved_numbers", {})[save_key] = {
         "dev_id": dev_id, 
         "fb_url": lease["fb_url"], 
-        "base_idx": lease.get("
+        "base_idx": lease.get("base_idx"), 
+        "custom_name": custom_name,
+        "time": int(time.time())
+    }
+    db.save_data(d)
+    
+    await msg.answer(
+        f"✅ <b>Saved as '{custom_name}'!</b>",
+        reply_markup=main_kb(msg.from_user.id),
+        parse_mode="HTML"
+    )
+
+@user_router.callback_query(F.data == "user:saved")
+async def user_saved_list(cq: CallbackQuery):
+    await cq.answer()
+    uid = cq.from_user.id
+    d = db.load_data()
+    saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
+    
+    if not saved: 
+        return await cq.message.edit_text("⭐ <b>My Numbers</b>\n\nNo saved numbers.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]), parse_mode="HTML")
+        
+    kb = []
+    for key, info in saved.items():
+        disp = f"+91{key}" if len(key) == 10 else key
+        name = info.get("custom_name", "Number")
+        kb.append([btn(f"{name} | {disp}", f"user:access:{key}", "📞")])
+    kb.append([btn("main menu", "user:main_menu", "🏠")])
+    await cq.message.edit_text("⭐ <b>My Numbers</b>\nTap to re-access:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_router.callback_query(F.data.startswith("user:access:"))
+async def user_access(cq: CallbackQuery):
+    await cq.answer()
+    key = cq.data.split(":")[2]
+    uid = cq.from_user.id
+    d = db.load_data()
+    saved = d.get("users", {}).get(str(uid), {}).get("saved_numbers", {})
+    if key not in saved: return await cq.message.edit_text("Not found!")
+    info = saved[key]
+    if time.time() - info["time"] > 86400:
+        del saved[key]
+        db.save_data(d)
+        return await cq.message.edit_text("❌ 24 hours complete. Number expired.", show_alert=True)
+    clients = await fbu.fetch_fb(f"{info['fb_url']}/clients.json")
+    if not (clients and info["dev_id"] in clients):
+        return await cq.message.edit_text("❌ Device offline or removed. Try after some time.", show_alert=True)
+    d["user_leases"][str(uid)] = {
+        "dev_id": info["dev_id"], "fb_url": info["fb_url"], "base_idx": info.get("base_idx"), "numbers": [key], "expire_at": int(time.time()) + 3600, "last_msg_id": 0, "top_number": key
+    }
+    db.save_data(d)
+    text = f"📱 <b>{sc('re-accessed')}</b>\n🆔 <code>{info['dev_id']}</code>\n📞 <code>+91{key}</code>"
+    kb = [[btn("stop", "user:stop", "⏹")], [btn("main menu", "user:main_menu", "🏠")]]
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "user:stop")
+async def user_stop(cq: CallbackQuery):
+    clear_user_lease(cq.from_user.id)
+    await cq.answer("⏹ Stopped.", show_alert=True)
+    from handlers.user.menu import user_main_menu_handler
+    await user_main_menu_handler(cq)
+
+@user_router.callback_query(F.data == "user:history")
+async def user_history(cq: CallbackQuery):
+    await cq.answer()
+    d = db.load_data()
+    hist = d["users"].get(str(cq.from_user.id), {}).get("otp_history", [])
+    text = "📜 <b>OTP History</b>\n\n"
+    if not hist: text += "No history."
+    else:
+        for h in hist:
+            time_str = fbu.get_ist_time_str(h['time'])
+            num = h.get('number', 'Unknown')
+            text += f"📅 {time_str}\n📱 {h['service']}\n📞 <code>+91{num}</code>\n🔑 <code>{h['otp']}</code>\n───────────\n"
+    await cq.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn("main menu", "user:main_menu", "🏠")]]), parse_mode="HTML")
+
+# 🚨 NAYA HANDLER: Manage Devices
+@user_router.callback_query(F.data.startswith("user:devices:"))
+async def user_devices(cq: CallbackQuery):
+    phone = cq.data.split(":")[2]
+    await cq.answer("🔄 Fetching your devices...")
+    
+    devices, error = await get_user_devices(phone)
+    if error:
+        return await cq.message.answer(f"❌ {error}")
+    
+    if not devices:
+        return await cq.message.answer(f"📱 <b>Manage Devices</b>\n\nKoi dusra device logged in nahi hai. Sirf bot ka session active hai.")
+    
+    text = f"📱 <b>Manage Devices</b>\nPhone: <code>{phone}</code>\n\n"
+    for i, d in enumerate(devices, 1):
+        text += f"{i}. <b>{d['app_name']}</b> ({d['device_model']})\n"
+        text += f"   📍 Country: {d['country']}\n"
+        text += f"   📅 Logged In: {d['date']}\n\n"
+        
+    await cq.message.answer(text)
