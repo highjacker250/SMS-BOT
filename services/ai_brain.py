@@ -65,10 +65,7 @@ tools = [{
 async def call_deepseek(messages, tools=None):
     if not DEEPSEEK_KEY:
         return None
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_KEY}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {DEEPSEEK_KEY}", "Content-Type": "application/json"}
     payload = {"model": DEEPSEEK_MODEL, "messages": messages}
     if tools:
         payload["tools"] = tools
@@ -92,10 +89,7 @@ async def call_deepseek(messages, tools=None):
 async def call_gemini(messages, tools=None):
     if not GEMINI_KEY:
         return None
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": GEMINI_KEY
-    }
+    headers = {"Content-Type": "application/json", "X-goog-api-key": GEMINI_KEY}
     contents = []
     for m in messages:
         role = "user" if m["role"] in ["user", "system"] else "model"
@@ -123,10 +117,7 @@ async def call_gemini(messages, tools=None):
 async def call_clean_api(messages, tools=None):
     if not CLEAN_API_KEY:
         return None
-    headers = {
-        "Authorization": f"Bearer {CLEAN_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {CLEAN_API_KEY}", "Content-Type": "application/json"}
     payload = {"model": "gpt-3.5-turbo", "messages": messages}
     if tools:
         payload["tools"] = tools
