@@ -1,177 +1,1388 @@
 <!DOCTYPE html>
-<html data-theme="jjk" lang="en">
+<html lang="en" data-theme="purple-magic">
 <head>
-    <meta charset="utf-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>Dark OTP Bot — AI SaaS Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root, [data-theme="jjk"] { --bg-base: #07040d; --bg-surface: #0e0919; --bg-card: rgba(23, 14, 41, 0.72); --border-subtle: rgba(139, 92, 246, 0.22); --primary: #8b5cf6; --accent: #38bdf8; --text-main: #f3f0ff; --text-muted: #9d8ec2; }
-        [data-theme="deathnote"] { --bg-base: #0a0000; --bg-surface: #1a0000; --bg-card: rgba(40, 0, 0, 0.72); --border-subtle: rgba(225, 29, 72, 0.22); --primary: #e11d48; --accent: #ff6b6b; --text-main: #fff; --text-muted: #c29d9d; }
-        [data-theme="solo"] { --bg-base: #000a1a; --bg-surface: #00142e; --bg-card: rgba(0, 20, 46, 0.72); --border-subtle: rgba(56, 189, 248, 0.22); --primary: #0ea5e9; --accent: #38bdf8; --text-main: #e0f2fe; --text-muted: #7dd3fc; }
-        [data-theme="cyber"] { --bg-base: #0a0a0a; --bg-surface: #141414; --bg-card: rgba(20, 20, 20, 0.72); --border-subtle: rgba(250, 204, 21, 0.22); --primary: #facc15; --accent: #22d3ee; --text-main: #fff; --text-muted: #a1a1aa; }
-        
-        body { background-color: var(--bg-base); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; transition: all 0.3s; }
-        .theme-card { background-color: var(--bg-card); border: 1px solid var(--border-subtle); backdrop-filter: blur(16px); transition: all 0.3s;}
-        .theme-card:hover { border-color: var(--accent); box-shadow: 0 0 15px var(--border-subtle); }
-        .text-accent { color: var(--accent); }
-        .bg-primary { background-color: var(--primary); }
-        .bg-accent { background-color: var(--accent); }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AetherOps — Dark OTP Bot Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            orbitron: ['Orbitron', 'sans-serif'],
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root, [data-theme="purple-magic"] {
+      --bg-base: #070510; --bg-sidebar: #0b0819; --bg-card: rgba(18, 12, 41, 0.78);
+      --bg-card-hover: rgba(28, 18, 64, 0.88); --bg-monitor: #05030d;
+      --border-main: rgba(157, 78, 221, 0.35); --border-glow: rgba(199, 125, 255, 0.75);
+      --text-main: #f1e9ff; --text-muted: #9d8ab8;
+      --accent-main: #c77dff; --accent-secondary: #7b2cbf;
+      --accent-glow: rgba(199, 125, 255, 0.45); --terminal-bg: #05030c;
+      --theme-badge: "領域展開 // JUJUTSU KAISEN"; --theme-character: "Satoru Gojo";
+      --chart-line: #c77dff; --chart-fill: rgba(199, 125, 255, 0.15);
+    }
+    [data-theme="crimson-shadow"] {
+      --bg-base: #090305; --bg-sidebar: #130609; --bg-card: rgba(26, 8, 12, 0.8);
+      --bg-card-hover: rgba(43, 13, 20, 0.9); --bg-monitor: #050102;
+      --border-main: rgba(255, 42, 75, 0.35); --border-glow: rgba(255, 77, 106, 0.75);
+      --text-main: #ffe6ea; --text-muted: #b88691;
+      --accent-main: #ff2a4b; --accent-secondary: #99001f;
+      --accent-glow: rgba(255, 42, 75, 0.45); --terminal-bg: #060102;
+      --theme-badge: "死神の眼 // DEATH NOTE"; --theme-character: "Ryuk & Light";
+      --chart-line: #ff2a4b; --chart-fill: rgba(255, 42, 75, 0.15);
+    }
+    [data-theme="neon-blue"] {
+      --bg-base: #030814; --bg-sidebar: #061024; --bg-card: rgba(8, 24, 54, 0.78);
+      --bg-card-hover: rgba(13, 37, 82, 0.88); --bg-monitor: #02050e;
+      --border-main: rgba(0, 240, 255, 0.35); --border-glow: rgba(56, 189, 248, 0.8);
+      --text-main: #e0f4ff; --text-muted: #7ca5c4;
+      --accent-main: #00f0ff; --accent-secondary: #0077ff;
+      --accent-glow: rgba(0, 240, 255, 0.45); --terminal-bg: #020610;
+      --theme-badge: "起きろ // SOLO LEVELING"; --theme-character: "Sung Jin-woo";
+      --chart-line: #00f0ff; --chart-fill: rgba(0, 240, 255, 0.15);
+    }
+    [data-theme="cyber-neon"] {
+      --bg-base: #090b12; --bg-sidebar: #101321; --bg-card: rgba(20, 25, 43, 0.8);
+      --bg-card-hover: rgba(30, 38, 66, 0.9); --bg-monitor: #06070c;
+      --border-main: rgba(255, 230, 0, 0.38); --border-glow: rgba(255, 0, 127, 0.8);
+      --text-main: #fcfcfd; --text-muted: #959cb3;
+      --accent-main: #ffe600; --accent-secondary: #ff007f;
+      --accent-glow: rgba(255, 230, 0, 0.45); --terminal-bg: #05060a;
+      --theme-badge: "超加速 // CYBERPUNK"; --theme-character: "Lucy & David";
+      --chart-line: #ffe600; --chart-fill: rgba(255, 230, 0, 0.15);
+    }
+
+    body {
+      background-color: var(--bg-base); color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      transition: background-color 0.4s ease, color 0.4s ease;
+      overflow-x: hidden;
+    }
+    .cyber-grid {
+      background-image: linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    .ambient-glow {
+      position: fixed; pointer-events: none; border-radius: 9999px;
+      filter: blur(140px); z-index: 0; transition: all 0.5s ease;
+    }
+    .hud-box {
+      position: relative; background: var(--bg-card); border: 1px solid var(--border-main);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .hud-box:hover { border-color: var(--border-glow); box-shadow: 0 0 25px var(--accent-glow); }
+    .hud-box::before, .hud-box::after {
+      content: ''; position: absolute; width: 8px; height: 8px; pointer-events: none;
+    }
+    .hud-box::before { top: -1px; left: -1px; border-top: 2px solid var(--accent-main); border-left: 2px solid var(--accent-main); }
+    .hud-box::after { bottom: -1px; right: -1px; border-bottom: 2px solid var(--accent-main); border-right: 2px solid var(--accent-main); }
+
+    .crt-overlay::before {
+      content: " "; display: block; position: absolute; inset: 0;
+      background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.28) 50%),
+                  linear-gradient(90deg, rgba(255,0,0,0.04), rgba(0,255,0,0.02), rgba(0,0,255,0.04));
+      z-index: 10; background-size: 100% 3px, 6px 100%; pointer-events: none; opacity: 0.85;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+    ::-webkit-scrollbar-thumb { background: var(--border-main); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent-main); }
+
+    .cyber-progress-fill {
+      background-size: 30px 30px;
+      background-image: linear-gradient(135deg, rgba(255,255,255,0.22) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.22) 75%, transparent 75%, transparent);
+      animation: progress-stripes 2s linear infinite;
+    }
+    @keyframes progress-stripes {
+      0% { background-position: 0 0; }
+      100% { background-position: 60px 0; }
+    }
+    .text-glow { text-shadow: 0 0 12px var(--accent-glow); }
+  </style>
 </head>
-<body class="min-h-screen flex flex-col overflow-hidden">
 
-    <!-- Header -->
-    <header class="h-16 w-full border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 backdrop-blur-xl flex items-center justify-between px-5 z-50">
-        <div class="flex items-center gap-3">
-            <span class="font-bold text-xl text-accent" style="font-family: 'Orbitron';">DARK OTP BOT</span>
-            <span class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs border border-green-500/50">SYSTEM ONLINE</span>
-        </div>
-        <div class="flex items-center gap-4">
-            <select id="themeSelector" class="bg-black/50 text-white border border-gray-600 rounded px-3 py-1 text-sm outline-none">
-                <option value="jjk">Jujutsu Kaisen</option>
-                <option value="deathnote">Death Note</option>
-                <option value="solo">Solo Leveling</option>
-                <option value="cyber">Cyberpunk</option>
-            </select>
-            <a href="/telegram" class="px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold shadow-lg">Telegram UI</a>
-        </div>
-    </header>
+<body class="min-h-screen text-slate-100 flex flex-col antialiased selection:bg-purple-900 selection:text-white">
+  <div class="ambient-glow w-96 h-96 -top-20 -left-20" style="background: var(--accent-glow);"></div>
+  <div class="ambient-glow w-[32rem] h-[32rem] -bottom-32 -right-32" style="background: var(--border-main);"></div>
+  <div id="sidebar-backdrop" class="fixed inset-0 bg-black/60 z-25 backdrop-blur-sm hidden lg:hidden"></div>
 
-    <main class="flex-1 overflow-y-auto p-6 space-y-6">
-
-        <!-- Top Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="theme-card rounded-2xl p-5">
-                <span class="text-xs text-[var(--text-muted)] uppercase font-bold">Total Logged In</span>
-                <div class="text-3xl font-black mt-2" id="accounts-count">0</div>
+  <div class="relative z-10 flex min-h-screen cyber-grid">
+    <!-- SIDEBAR -->
+    <aside id="app-sidebar" class="fixed lg:static top-0 bottom-0 left-0 w-64 lg:w-72 flex-shrink-0 flex flex-col border-r transition-all duration-300 z-30 -translate-x-full lg:translate-x-0" style="background-color: var(--bg-sidebar); border-color: var(--border-main);">
+      <div class="p-5 border-b flex items-center justify-between" style="border-color: var(--border-main);">
+        <div class="flex items-center space-x-3">
+          <div class="relative w-11 h-11 flex items-center justify-center rounded-xl overflow-hidden shadow-lg border" style="background: linear-gradient(135deg, var(--bg-base), var(--bg-card)); border-color: var(--border-glow);">
+            <i class="fa-solid fa-atom text-xl animate-spin text-glow" style="color: var(--accent-main); animation-duration: 9s;"></i>
+          </div>
+          <div>
+            <div class="font-orbitron font-extrabold text-base tracking-widest flex items-center gap-1.5" style="color: var(--text-main);">
+              <span>DARK</span><span style="color: var(--accent-main);">//</span><span>OTP</span>
             </div>
-            <div class="theme-card rounded-2xl p-5">
-                <span class="text-xs text-[var(--text-muted)] uppercase font-bold">Working Proxies</span>
-                <div class="text-3xl font-black mt-2" id="proxies-count">0</div>
+            <div class="text-[10px] uppercase font-mono tracking-wider flex items-center gap-1" style="color: var(--text-muted);">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+              <span>CONTROL PANEL</span>
             </div>
-            <div class="theme-card rounded-2xl p-5">
-                <span class="text-xs text-[var(--text-muted)] uppercase font-bold">System Task</span>
-                <div class="text-lg font-bold mt-2 text-accent" id="live-task">Idle</div>
-                <p class="text-xs mt-1 text-[var(--text-muted)]" id="live-detail">Waiting...</p>
+          </div>
+        </div>
+        <button id="sidebar-collapse-btn" class="lg:hidden text-slate-400 hover:text-white p-2 rounded-lg border border-slate-700">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <div class="px-5 py-3 border-b flex items-center justify-between text-xs" style="background: rgba(0,0,0,0.25); border-color: var(--border-main);">
+        <span class="font-mono text-[11px] font-semibold tracking-wider flex items-center gap-1.5 truncate" style="color: var(--accent-main);">
+          <i class="fa-solid fa-shield-halved flex-shrink-0"></i>
+          <span id="sidebar-theme-badge">領域展開 // JUJUTSU KAISEN</span>
+        </span>
+      </div>
+
+      <nav class="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
+        <button data-nav-target="overview" class="nav-link active w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all" style="background: var(--bg-card); border: 1px solid var(--accent-main); color: var(--accent-main); box-shadow: 0 0 15px var(--accent-glow);">
+          <div class="flex items-center space-x-3"><i class="fa-solid fa-gauge-high w-5 text-center"></i><span>Overview</span></div>
+          <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40 border border-white/10">01</span>
+        </button>
+        <button data-nav-target="live-view" class="nav-link w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all text-slate-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <div class="flex items-center space-x-3"><i class="fa-solid fa-display w-5 text-center"></i><span>Live View</span></div>
+          <span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-950/70 border border-red-500/40 text-red-300">
+            <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>REC
+          </span>
+        </button>
+        <button data-nav-target="data-vault" class="nav-link w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all text-slate-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <div class="flex items-center space-x-3"><i class="fa-solid fa-vault w-5 text-center"></i><span>Data Vault</span></div>
+          <span id="nav-vault-count" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40 border border-white/10">0</span>
+        </button>
+        <button data-nav-target="user-profile" class="nav-link w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all text-slate-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <div class="flex items-center space-x-3"><i class="fa-solid fa-id-badge w-5 text-center"></i><span>User Profile</span></div>
+          <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-purple-300">LVL 99</span>
+        </button>
+        <button data-nav-target="settings" class="nav-link w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all text-slate-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <div class="flex items-center space-x-3"><i class="fa-solid fa-sliders w-5 text-center"></i><span>Settings</span></div>
+          <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40 border border-white/10">CFG</span>
+        </button>
+        <a href="/telegram" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all text-slate-400 hover:text-white hover:bg-white/5 border border-transparent">
+          <div class="flex items-center space-x-3"><i class="fa-brands fa-telegram w-5 text-center"></i><span>Telegram UI</span></div>
+          <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+        </a>
+      </nav>
+
+      <div class="mx-3 p-3 rounded-2xl border backdrop-blur-md" style="background: rgba(0,0,0,0.4); border-color: var(--border-main);">
+        <div class="flex items-center space-x-3">
+          <div class="relative w-10 h-10 rounded-xl overflow-hidden border flex-shrink-0 flex items-center justify-center font-orbitron font-black text-sm" style="border-color: var(--accent-main); background: linear-gradient(135deg, var(--bg-card), var(--accent-secondary)); color: #fff;" id="companion-avatar-icon">SG</div>
+          <div class="flex-1 min-w-0">
+            <div id="companion-name" class="font-orbitron font-bold text-xs truncate" style="color: var(--accent-main);">Satoru Gojo</div>
+            <div id="companion-badge" class="text-[9px] font-mono text-slate-400 truncate">JUJUTSU KAISEN</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 m-3 rounded-2xl border backdrop-blur-md" style="background: rgba(0,0,0,0.35); border-color: var(--border-main);">
+        <div class="flex items-center justify-between text-xs mb-2">
+          <span class="font-mono text-slate-400">NODE STATUS</span>
+          <span id="node-status-badge" class="font-mono text-emerald-400 font-bold flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>ONLINE
+          </span>
+        </div>
+        <div class="space-y-1.5 text-xs font-mono">
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span>Accounts:</span>
+            <span class="text-white font-semibold" id="sidebar-accounts-metric">0</span>
+          </div>
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span>Proxies:</span>
+            <span class="text-white font-semibold" id="sidebar-proxies-metric">0</span>
+          </div>
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span>Hunting:</span>
+            <span id="sidebar-hunting-metric" class="text-emerald-400 font-semibold">ON</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- TOP BAR -->
+      <header class="h-18 px-4 sm:px-6 border-b flex items-center justify-between sticky top-0 z-20 backdrop-blur-xl" style="background: rgba(7, 5, 16, 0.88); border-color: var(--border-main);">
+        <div class="flex items-center space-x-3">
+          <button id="sidebar-toggle-btn" class="lg:hidden p-2 rounded-xl border border-white/10 text-slate-300 hover:text-white" style="background: var(--bg-card);">
+            <i class="fa-solid fa-bars text-lg"></i>
+          </button>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-orbitron font-bold text-sm sm:text-base tracking-wider" id="topbar-current-view">OVERVIEW</span>
+              <span class="hidden sm:inline-block font-mono text-[11px] px-2 py-0.5 rounded-full border" style="background: rgba(0,0,0,0.4); border-color: var(--border-main); color: var(--accent-main);">FASTAPI</span>
             </div>
+            <div class="text-[11px] font-mono text-slate-400 hidden md:block">DAEMON PROTOCOL: HYPERTEXT-STREAM // TLS 1.3</div>
+          </div>
         </div>
 
-        <!-- Main Grid: Live Screen & Feed -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            <!-- 🔴 Live Browser Screen -->
-            <div class="theme-card rounded-2xl p-4 flex flex-col">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-bold text-accent uppercase" style="font-family: 'Orbitron';">Live AI Browser</h3>
-                    <span class="flex items-center gap-1 text-xs text-red-500"><span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> REC</span>
+        <div class="flex items-center space-x-2 sm:space-x-4">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono font-semibold" style="background: rgba(0,0,0,0.45); border-color: var(--border-main);">
+            <span class="relative flex h-2.5 w-2.5">
+              <span id="system-status-ping-dot" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background-color: var(--accent-main);"></span>
+              <span id="system-status-dot" class="relative inline-flex rounded-full h-2.5 w-2.5" style="background-color: var(--accent-main);"></span>
+            </span>
+            <span id="system-status-text" class="tracking-wide">ACTIVE</span>
+          </div>
+
+          <button id="worker-toggle-btn" class="relative group px-3 sm:px-4 py-2 rounded-xl font-orbitron font-bold text-xs sm:text-sm tracking-wider flex items-center gap-2 shadow-lg transition-all duration-300 cursor-pointer" style="background: linear-gradient(135deg, var(--accent-secondary), var(--accent-main)); color: #fff; box-shadow: 0 0 20px var(--accent-glow);">
+            <i id="worker-toggle-icon" class="fa-solid fa-power-off text-sm group-hover:rotate-90 transition-transform"></i>
+            <span id="worker-toggle-label" class="hidden xs:inline">WORKER: RUNNING</span>
+          </button>
+
+          <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono" style="background: rgba(0,0,0,0.35); border-color: var(--border-main);">
+            <i class="fa-solid fa-clock text-emerald-400"></i>
+            <span id="last-update-display" class="text-slate-400">—</span>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2 sm:space-x-3">
+          <button id="audio-toggle-btn" class="p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-mono text-slate-300 hover:text-white transition-all flex items-center gap-1.5" style="background: var(--bg-card); border-color: var(--border-main);">
+            <i id="audio-icon" class="fa-solid fa-volume-high" style="color: var(--accent-main);"></i>
+            <span class="hidden sm:inline">SFX</span>
+          </button>
+
+          <div class="relative" id="theme-dropdown-container">
+            <button id="theme-dropdown-btn" class="flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-mono font-semibold transition-all hover:border-white/40 cursor-pointer" style="background: var(--bg-card); border-color: var(--border-main);">
+              <span id="current-theme-swatch" class="w-3 h-3 rounded-full shadow-sm" style="background-color: var(--accent-main);"></span>
+              <span id="current-theme-name" class="hidden sm:inline font-orbitron tracking-wider text-[11px]">Purple Magic</span>
+              <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
+            </button>
+            <div id="theme-dropdown-menu" class="hidden absolute right-0 mt-2 w-64 rounded-2xl border p-2 shadow-2xl backdrop-blur-2xl z-50" style="background: var(--bg-sidebar); border-color: var(--border-glow);">
+              <div class="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest text-slate-400 border-b border-white/10 mb-1">SELECT THEME</div>
+              <button data-theme-value="purple-magic" class="theme-option w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-white/10 text-left">
+                <div class="flex items-center space-x-2.5">
+                  <span class="w-4 h-4 rounded-full border border-white/20 bg-[#c77dff] shadow-[0_0_10px_#c77dff]"></span>
+                  <div><div class="font-orbitron text-xs font-bold text-white">Purple Magic</div><div class="text-[10px] text-purple-300 font-mono">Jujutsu Kaisen</div></div>
                 </div>
-                <!-- Live Image from Backend -->
-                <div class="flex-1 bg-black rounded-xl overflow-hidden relative border border-gray-700 min-h-[300px] flex items-center justify-center">
-                    <img id="live-screen" src="/api/live_screenshot" alt="Waiting for AI..." class="w-full h-full object-contain" onerror="this.style.display='none'; document.getElementById('screen-placeholder').style.display='block';" onload="this.style.display='block'; document.getElementById('screen-placeholder').style.display='none';"/>
-                    <div id="screen-placeholder" class="text-gray-500 text-sm absolute">Waiting for AI to start browser...</div>
+                <i class="fa-solid fa-check text-xs text-[#c77dff] theme-check-icon"></i>
+              </button>
+              <button data-theme-value="crimson-shadow" class="theme-option w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-white/10 text-left">
+                <div class="flex items-center space-x-2.5">
+                  <span class="w-4 h-4 rounded-full border border-white/20 bg-[#ff2a4b] shadow-[0_0_10px_#ff2a4b]"></span>
+                  <div><div class="font-orbitron text-xs font-bold text-white">Crimson Shadow</div><div class="text-[10px] text-red-300 font-mono">Death Note</div></div>
                 </div>
-            </div>
-
-            <!-- Activity Feed -->
-            <div class="theme-card rounded-2xl p-4 flex flex-col">
-                <h3 class="text-sm font-bold text-accent mb-3 uppercase" style="font-family: 'Orbitron';">Activity Feed</h3>
-                <div class="flex-1 overflow-y-auto space-y-2 text-sm" id="activity-feed">
-                    <div class="p-2 rounded bg-black/30 border border-gray-700 text-gray-400">Waiting for activity...</div>
+                <i class="fa-solid fa-check text-xs text-[#ff2a4b] theme-check-icon opacity-0"></i>
+              </button>
+              <button data-theme-value="neon-blue" class="theme-option w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-white/10 text-left">
+                <div class="flex items-center space-x-2.5">
+                  <span class="w-4 h-4 rounded-full border border-white/20 bg-[#00f0ff] shadow-[0_0_10px_#00f0ff]"></span>
+                  <div><div class="font-orbitron text-xs font-bold text-white">Neon Blue</div><div class="text-[10px] text-cyan-300 font-mono">Solo Leveling</div></div>
                 </div>
+                <i class="fa-solid fa-check text-xs text-[#00f0ff] theme-check-icon opacity-0"></i>
+              </button>
+              <button data-theme-value="cyber-neon" class="theme-option w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-white/10 text-left">
+                <div class="flex items-center space-x-2.5">
+                  <span class="w-4 h-4 rounded-full border border-white/20 bg-[#ffe600] shadow-[0_0_10px_#ffe600]"></span>
+                  <div><div class="font-orbitron text-xs font-bold text-white">Cyber Neon</div><div class="text-[10px] text-yellow-300 font-mono">Cyberpunk</div></div>
+                </div>
+                <i class="fa-solid fa-check text-xs text-[#ffe600] theme-check-icon opacity-0"></i>
+              </button>
+            </div>
+          </div>
+
+          <div id="topbar-user-profile-btn" class="flex items-center space-x-2.5 pl-2 border-l border-white/10 cursor-pointer" title="Open User Profile">
+            <div class="relative">
+              <div class="w-10 h-10 rounded-xl overflow-hidden border-2" style="border-color: var(--accent-main);">
+                <div id="topbar-user-initials" class="w-full h-full flex items-center justify-center font-orbitron font-extrabold text-sm" style="background: linear-gradient(135deg, var(--bg-card), var(--accent-secondary)); color: #fff;">OP</div>
+              </div>
+              <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#070510]"></span>
+            </div>
+            <div class="hidden xl:block text-left">
+              <div id="topbar-user-rank" class="font-orbitron text-xs font-bold" style="color: var(--text-main);">S-RANK</div>
+              <div id="topbar-user-handle" class="text-[10px] font-mono text-slate-400">@operator</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
+        <!-- OVERVIEW -->
+        <section id="view-overview" class="view-panel space-y-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            <div class="hud-box p-5 rounded-2xl">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs uppercase tracking-wider text-slate-400">TOTAL ACCOUNTS</span>
+                <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-white/10" style="background: rgba(0,0,0,0.3); color: var(--accent-main);"><i class="fa-solid fa-server"></i></div>
+              </div>
+              <div class="mt-3 flex items-baseline space-x-2">
+                <span id="metric-accounts-count" class="font-orbitron font-extrabold text-3xl text-glow" style="color: var(--text-main);">0</span>
+                <span id="metric-active-accounts" class="text-xs font-mono font-medium text-emerald-400">0 active</span>
+              </div>
+              <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-slate-400 pt-2 border-t border-white/5">
+                <span>Telegram sessions</span>
+                <span class="text-emerald-400">Synced</span>
+              </div>
             </div>
 
-        </div>
-
-        <!-- Hunting Toggle -->
-        <div class="theme-card rounded-2xl p-6 flex items-center justify-between">
-            <div>
-                <h2 class="text-xl font-bold text-accent">AI GHATAK HUNTER</h2>
-                <p class="text-xs text-[var(--text-muted)] mt-1" id="hunting-status">Loading status...</p>
+            <div class="hud-box p-5 rounded-2xl">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs uppercase tracking-wider text-slate-400">COMPLETION RATE</span>
+                <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-white/10" style="background: rgba(0,0,0,0.3); color: var(--accent-main);"><i class="fa-solid fa-chart-line"></i></div>
+              </div>
+              <div class="mt-3 flex items-baseline space-x-2">
+                <span id="metric-completion-rate" class="font-orbitron font-extrabold text-3xl text-glow" style="color: var(--text-main);">0%</span>
+                <span class="text-xs font-mono text-emerald-400">live</span>
+              </div>
+              <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-slate-400 pt-2 border-t border-white/5">
+                <span>Active / Total</span>
+                <span id="metric-rate-detail" class="text-slate-300">0/0</span>
+              </div>
             </div>
-            <button id="hunting-btn" onclick="toggleHunting()" class="px-8 py-3 rounded-xl font-bold text-white bg-red-600 text-lg shadow-lg">CHECKING...</button>
+
+            <div class="hud-box p-5 rounded-2xl">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs uppercase tracking-wider text-slate-400">WORKING PROXIES</span>
+                <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-white/10" style="background: rgba(0,0,0,0.3); color: var(--accent-main);"><i class="fa-solid fa-network-wired"></i></div>
+              </div>
+              <div class="mt-3 flex items-baseline space-x-2">
+                <span id="metric-active-proxies" class="font-orbitron font-extrabold text-3xl text-glow" style="color: var(--text-main);">0</span>
+                <span class="text-xs font-mono text-slate-400">SOCKS5</span>
+              </div>
+              <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-slate-400 pt-2 border-t border-white/5">
+                <span>Auto-refresh</span>
+                <span class="text-emerald-400">5 min</span>
+              </div>
+            </div>
+
+            <div class="hud-box p-5 rounded-2xl">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs uppercase tracking-wider text-slate-400">HUNTING STATE</span>
+                <div class="w-9 h-9 rounded-xl flex items-center justify-center border border-white/10" style="background: rgba(0,0,0,0.3); color: var(--accent-main);"><i class="fa-solid fa-crosshairs"></i></div>
+              </div>
+              <div class="mt-3 flex items-baseline space-x-2">
+                <span id="metric-hunting-state" class="font-orbitron font-extrabold text-2xl text-glow" style="color: var(--text-main);">ON</span>
+              </div>
+              <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-slate-400 pt-2 border-t border-white/5">
+                <span>Background hunter</span>
+                <span id="metric-hunting-detail" class="text-emerald-400">Running</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div class="hud-box p-4 rounded-2xl">
+              <div class="flex items-center justify-between mb-2">
+                <div>
+                  <div class="font-orbitron text-xs font-bold tracking-wider" style="color: var(--accent-main);">ACCOUNTS TREND</div>
+                  <div class="text-[10px] font-mono text-slate-400">Live polling</div>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-black/40 border border-white/10 text-emerald-400 flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>LIVE
+                </span>
+              </div>
+              <div class="h-44 relative"><canvas id="chart-accounts"></canvas></div>
+            </div>
+
+            <div class="hud-box p-4 rounded-2xl">
+              <div class="flex items-center justify-between mb-2">
+                <div>
+                  <div class="font-orbitron text-xs font-bold tracking-wider" style="color: var(--accent-main);">COMPLETION TREND</div>
+                  <div class="text-[10px] font-mono text-slate-400">Active / Total %</div>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-black/40 border border-white/10 text-cyan-400">%</span>
+              </div>
+              <div class="h-44 relative"><canvas id="chart-completion"></canvas></div>
+            </div>
+
+            <div class="hud-box p-4 rounded-2xl">
+              <div class="flex items-center justify-between mb-2">
+                <div>
+                  <div class="font-orbitron text-xs font-bold tracking-wider" style="color: var(--accent-main);">PROXIES TREND</div>
+                  <div class="text-[10px] font-mono text-slate-400">Working proxies</div>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-black/40 border border-white/10 text-purple-300">SOCKS5</span>
+              </div>
+              <div class="h-44 relative"><canvas id="chart-proxies"></canvas></div>
+            </div>
+          </div>
+
+          <div class="hud-box p-5 rounded-2xl">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
+              <div class="flex items-center space-x-3">
+                <div class="w-3 h-3 rounded-full animate-ping" style="background-color: var(--accent-main);"></div>
+                <div>
+                  <div class="font-orbitron text-xs font-bold tracking-widest uppercase text-slate-400">LIVE WORKER STATUS</div>
+                  <div id="live-task-title" class="font-mono text-sm sm:text-base font-bold text-white mt-0.5">Idle</div>
+                </div>
+              </div>
+              <div class="flex items-center space-x-3 font-mono text-xs text-slate-400">
+                <span id="live-task-detail" class="px-3 py-1 rounded-lg border border-white/10 bg-black/30">Waiting...</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-8 space-y-3">
+              <div class="flex items-center justify-between px-1">
+                <div class="flex items-center space-x-2">
+                  <span class="flex h-3 w-3 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+                  </span>
+                  <h2 class="font-orbitron font-extrabold text-sm sm:text-base tracking-wider">LIVE BROWSER</h2>
+                </div>
+              </div>
+
+              <div id="cctv-monitor-container" class="hud-box rounded-2xl overflow-hidden border-2 shadow-2xl relative" style="border-color: var(--border-glow); background: var(--bg-monitor);">
+                <div class="px-4 py-2.5 border-b flex items-center justify-between text-xs font-mono relative z-20" style="background: rgba(0,0,0,0.7); border-color: var(--border-main);">
+                  <div class="flex items-center space-x-3">
+                    <div class="flex space-x-1.5">
+                      <span class="w-3 h-3 rounded-full bg-red-500/80 inline-block"></span>
+                      <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+                      <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+                    </div>
+                    <span class="text-slate-300 font-bold">Live AI Browser Feed</span>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-red-900/60 border border-red-500/40 text-red-200 font-bold text-[11px] animate-pulse flex items-center gap-1">
+                    <i class="fa-solid fa-circle text-[8px] text-red-500"></i>REC
+                  </span>
+                </div>
+
+                <div class="relative w-full aspect-video min-h-[300px] sm:min-h-[420px] bg-black flex items-center justify-center overflow-hidden crt-overlay" id="screen-viewport">
+                  <img id="live-screen" src="" alt="Live Browser" class="w-full h-full object-contain hidden" />
+                  <div id="screen-placeholder" class="text-slate-500 text-sm font-mono flex flex-col items-center gap-2">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
+                    <span>Waiting for browser automation...</span>
+                  </div>
+                  <div class="absolute bottom-4 right-4 z-20 pointer-events-none font-orbitron text-xs font-black tracking-widest px-3 py-1 rounded-lg border backdrop-blur-md" style="background: rgba(0,0,0,0.7); border-color: var(--border-main); color: var(--accent-main);">AETHER//VISION</div>
+                </div>
+
+                <div class="px-4 py-3 border-t flex flex-wrap items-center justify-between gap-2 text-xs font-mono relative z-20" style="background: rgba(0,0,0,0.85); border-color: var(--border-main);">
+                  <div class="flex items-center space-x-2">
+                    <button id="btn-pause-stream" class="px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white bg-white/5 flex items-center gap-1.5">
+                      <i class="fa-solid fa-pause text-xs" id="pause-stream-icon"></i>
+                      <span id="pause-stream-text">Pause</span>
+                    </button>
+                  </div>
+                  <div class="flex items-center space-x-2">
+                    <button id="btn-toggle-crt" class="px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:text-white bg-white/5 flex items-center gap-1.5">
+                      <i class="fa-solid fa-tv text-xs"></i><span>CRT</span>
+                    </button>
+                    <button id="btn-fullscreen-monitor" class="px-3 py-1.5 rounded-lg border text-white flex items-center gap-1.5" style="background: var(--bg-card); border-color: var(--accent-main);">
+                      <i class="fa-solid fa-expand text-xs"></i><span>Fullscreen</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="lg:col-span-4 space-y-3 flex flex-col">
+              <div class="flex items-center justify-between px-1">
+                <div class="flex items-center space-x-2">
+                  <i class="fa-solid fa-bolt text-sm" style="color: var(--accent-main);"></i>
+                  <h2 class="font-orbitron font-extrabold text-sm sm:text-base tracking-wider">ACTIVITY FEED</h2>
+                </div>
+                <button id="btn-clear-feed" class="text-xs font-mono px-2 py-1 rounded-lg border border-white/10 text-slate-400 hover:text-white bg-black/40">
+                  <i class="fa-solid fa-trash-can text-[10px]"></i>
+                </button>
+              </div>
+
+              <div class="hud-box rounded-2xl flex-1 flex flex-col p-4 overflow-hidden border shadow-xl min-h-[440px]" style="border-color: var(--border-main);">
+                <div id="activity-feed-list" class="flex-1 space-y-2.5 overflow-y-auto pr-1 max-h-[520px]">
+                  <div class="p-3 rounded-xl border border-white/10 bg-black/40 text-slate-500 text-xs font-mono text-center">No activity yet.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+              <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-terminal text-sm" style="color: var(--accent-main);"></i>
+                <h2 class="font-orbitron font-extrabold text-sm sm:text-base tracking-wider">TERMINAL</h2>
+              </div>
+              <div class="flex items-center space-x-2 font-mono text-xs">
+                <button id="btn-copy-terminal" class="px-2.5 py-1 rounded-lg border border-white/10 text-slate-400 hover:text-white bg-black/40">
+                  <i class="fa-solid fa-copy text-[10px] mr-1"></i>Copy
+                </button>
+                <button id="btn-clear-terminal" class="px-2.5 py-1 rounded-lg border border-white/10 text-slate-400 hover:text-white bg-black/40">
+                  <i class="fa-solid fa-ban text-[10px] mr-1"></i>Clear
+                </button>
+              </div>
+            </div>
+
+            <div class="rounded-2xl border-2 overflow-hidden shadow-2xl font-mono text-xs" style="background: var(--terminal-bg); border-color: var(--border-main);">
+              <div class="px-4 py-2 border-b flex items-center justify-between bg-black/80 text-slate-400 select-none" style="border-color: var(--border-main);">
+                <div class="flex items-center space-x-2">
+                  <span class="w-3 h-3 rounded-full bg-red-500/80 inline-block"></span>
+                  <span class="w-3 h-3 rounded-full bg-yellow-500/80 inline-block"></span>
+                  <span class="w-3 h-3 rounded-full bg-green-500/80 inline-block"></span>
+                  <span class="ml-2 text-slate-300 font-semibold truncate">aether@panel: ~/logs/live.log</span>
+                </div>
+                <span class="text-[11px] flex items-center gap-2 flex-shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>STREAM
+                </span>
+              </div>
+              <div id="terminal-output" class="p-4 h-52 sm:h-60 overflow-y-auto space-y-1 text-slate-300 leading-relaxed"></div>
+              <form id="terminal-command-form" class="px-4 py-2.5 border-t flex items-center bg-black/90" style="border-color: var(--border-main);">
+                <span class="text-emerald-400 font-bold mr-2 select-none">operator@aether:~$</span>
+                <input type="text" id="terminal-command-input" placeholder="Try: help, status, start, stop, theme <name>, ping, accounts, clear" class="flex-1 bg-transparent text-white focus:outline-none font-mono text-xs placeholder:text-slate-600" autocomplete="off" />
+                <button type="submit" class="px-3 py-1 rounded-lg font-mono text-xs font-bold text-black flex-shrink-0" style="background-color: var(--accent-main);">RUN</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- LIVE VIEW (fullscreen) -->
+        <section id="view-live-view" class="view-panel hidden space-y-6">
+          <div class="hud-box p-6 rounded-2xl">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="font-orbitron font-extrabold text-lg tracking-wider" style="color: var(--accent-main);">LIVE BROWSER THEATER</h2>
+                <p class="text-sm text-slate-400 font-mono">Full-screen real-time browser screenshot stream.</p>
+              </div>
+              <button id="btn-refresh-screenshot" class="px-4 py-2 rounded-xl text-xs font-mono border border-white/20 hover:bg-white/10 text-white">
+                <i class="fa-solid fa-rotate mr-1.5 text-emerald-400"></i>Refresh
+              </button>
+            </div>
+
+            <div class="rounded-2xl border-2 overflow-hidden shadow-2xl" style="border-color: var(--border-glow); background: black;">
+              <img id="live-screen-full" src="" alt="Live Browser" class="w-full h-auto hidden" />
+              <div id="live-screen-full-placeholder" class="w-full aspect-video flex items-center justify-center text-slate-500 text-sm font-mono flex-col gap-2">
+                <i class="fa-solid fa-spinner fa-spin text-3xl"></i>
+                <span>Waiting for browser automation...</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DATA VAULT -->
+        <section id="view-data-vault" class="view-panel hidden space-y-6">
+          <div class="hud-box p-6 rounded-2xl">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 class="font-orbitron font-extrabold text-lg tracking-wider" style="color: var(--accent-main);">DATA VAULT // TELEGRAM ACCOUNTS</h2>
+                <p class="text-sm text-slate-400 font-mono">Synced from <code class="text-purple-300">GET /api/get_accounts</code></p>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button id="btn-refresh-accounts" class="px-3.5 py-2 rounded-xl border border-white/20 text-xs font-mono text-slate-200 hover:text-white bg-black/40">
+                  <i class="fa-solid fa-rotate mr-1.5"></i>Refresh
+                </button>
+                <button id="btn-export-vault" class="px-3.5 py-2 rounded-xl text-xs font-orbitron font-bold text-black" style="background-color: var(--accent-main);">
+                  <i class="fa-solid fa-file-export mr-1.5"></i>Export JSON
+                </button>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-white/10 bg-black/40">
+              <table class="w-full text-left font-mono text-xs">
+                <thead class="bg-black/80 text-slate-400 border-b border-white/10 uppercase text-[11px]">
+                  <tr>
+                    <th class="p-3.5">Phone</th>
+                    <th class="p-3.5">Status</th>
+                    <th class="p-3.5">Session</th>
+                    <th class="p-3.5">Device ID</th>
+                    <th class="p-3.5">Task</th>
+                  </tr>
+                </thead>
+                <tbody id="accounts-table-body" class="divide-y divide-white/5 text-slate-300"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- USER PROFILE -->
+        <section id="view-user-profile" class="view-panel hidden space-y-6">
+          <div class="hud-box p-6 rounded-2xl">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="font-orbitron font-extrabold text-lg tracking-wider" style="color: var(--accent-main);">OPERATOR PROFILE</h2>
+                <p class="text-sm text-slate-400 font-mono">Persisted in database, synced across devices.</p>
+              </div>
+              <span class="text-xs font-mono px-2.5 py-1 rounded-full border border-emerald-500/30 bg-emerald-950/40 text-emerald-400">
+                <i class="fa-solid fa-lock text-[10px] mr-1"></i>DB
+              </span>
+            </div>
+
+            <form id="profile-edit-form" class="space-y-5">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-mono uppercase text-slate-400 mb-1.5">Username</label>
+                  <input type="text" id="prof-input-username" class="w-full bg-black/60 border border-white/20 rounded-xl px-4 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-purple-400" required />
+                </div>
+                <div>
+                  <label class="block text-xs font-mono uppercase text-slate-400 mb-1.5">Email</label>
+                  <input type="email" id="prof-input-email" class="w-full bg-black/60 border border-white/20 rounded-xl px-4 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-purple-400" required />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-mono uppercase text-slate-400 mb-1.5">Rank / Title</label>
+                <select id="prof-input-rank" class="w-full bg-black/60 border border-white/20 rounded-xl px-4 py-2.5 text-sm font-mono text-white focus:outline-none">
+                  <option value="S-RANK HUNTER">S-Rank Hunter</option>
+                  <option value="SPECIAL GRADE">Special Grade Sorcerer</option>
+                  <option value="NEW WORLD GOD">God of the New World</option>
+                  <option value="CYBER EDGERUNNER">Night City Legend</option>
+                </select>
+              </div>
+
+              <div id="profile-form-error" class="hidden p-3 rounded-xl bg-red-950/70 border border-red-500/40 text-red-300 font-mono text-xs"></div>
+
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <button type="submit" class="px-6 py-3 rounded-xl font-orbitron font-bold text-xs uppercase tracking-wider text-black shadow-lg flex items-center gap-2" style="background-color: var(--accent-main);">
+                  <i class="fa-solid fa-floppy-disk"></i><span>Save Profile</span>
+                </button>
+                <span id="profile-save-indicator" class="text-xs font-mono text-emerald-400 opacity-0 transition-opacity flex items-center gap-1.5">
+                  <i class="fa-solid fa-check"></i>Saved!
+                </span>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section id="view-settings" class="view-panel hidden space-y-6">
+          <div class="hud-box p-6 rounded-2xl">
+            <h2 class="font-orbitron font-extrabold text-lg tracking-wider mb-2" style="color: var(--accent-main);">SYSTEM SETTINGS</h2>
+            <p class="text-sm text-slate-400 font-mono mb-6">Persisted in database.</p>
+
+            <form id="settings-form" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div class="space-y-4">
+                <div class="p-4 rounded-xl border border-white/10 bg-black/40 space-y-3">
+                  <div class="font-orbitron font-bold text-xs uppercase tracking-wider text-slate-300">Notifications</div>
+                  <label class="flex items-center justify-between p-2.5 rounded-lg bg-black/50 border border-white/5 cursor-pointer">
+                    <div>
+                      <div class="font-bold text-white text-xs">Sound Effects</div>
+                      <div class="text-[10px] text-slate-400">Procedural audio chirps</div>
+                    </div>
+                    <input type="checkbox" id="cfg-sound" class="rounded bg-black border-slate-700 text-purple-600">
+                  </label>
+                </div>
+
+                <div class="p-4 rounded-xl border border-white/10 bg-black/40 space-y-3 font-mono text-xs">
+                  <div class="font-orbitron font-bold text-xs uppercase tracking-wider text-slate-300">Webhook</div>
+                  <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">Discord / Slack Alert URL</label>
+                    <input type="text" id="cfg-discord-webhook" placeholder="https://discord.com/api/webhooks/..." class="w-full bg-black/70 border border-white/20 rounded-xl px-4 py-2 text-xs text-white focus:outline-none" />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">API Base Path</label>
+                    <input type="text" id="cfg-api-base" class="w-full bg-black/70 border border-white/20 rounded-xl px-4 py-2 text-xs text-white focus:outline-none" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <div class="p-4 rounded-xl border border-white/10 bg-black/40 space-y-3 font-mono text-xs">
+                  <div class="font-orbitron font-bold text-xs uppercase tracking-wider text-slate-300">Daemon</div>
+                  <div>
+                    <label class="block text-[10px] text-slate-400 mb-1">Health Poll Interval (seconds)</label>
+                    <input type="number" id="cfg-poll-interval" min="1" max="30" class="w-full bg-black/70 border border-white/20 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none" />
+                  </div>
+                </div>
+
+                <button type="submit" class="w-full py-3 rounded-xl font-orbitron font-bold text-xs uppercase tracking-wider text-black shadow-lg" style="background-color: var(--accent-main);">Save Settings</button>
+                <span id="settings-save-indicator" class="block text-center text-xs font-mono text-emerald-400 opacity-0 transition-opacity">Settings saved!</span>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+
+      <footer class="px-6 py-2 border-t text-[11px] font-mono flex items-center justify-between text-slate-500 backdrop-blur-md" style="background: rgba(5, 3, 12, 0.75); border-color: var(--border-main);">
+        <div class="flex items-center space-x-4">
+          <span>DARK OTP BOT // CONTROL PANEL</span>
+          <span class="hidden sm:inline">ENDPOINTS: /api/health /api/get_accounts /api/toggle_hunting /api/activity_feed /api/get_profile /api/get_settings</span>
         </div>
+        <div class="flex items-center space-x-3">
+          <span id="footer-connection" class="text-emerald-400">CONNECTED</span>
+        </div>
+      </footer>
+    </div>
+  </div>
 
-    </main>
+  <script>
+    (function () {
+      'use strict';
 
-    <script>
-        // 🚨 Theme Logic
-        const themeSelector = document.getElementById('themeSelector');
-        themeSelector.addEventListener('change', (e) => {
-            document.documentElement.setAttribute('data-theme', e.target.value);
+      const state = {
+        theme: localStorage.getItem('anime_control_theme') || 'purple-magic',
+        soundEnabled: localStorage.getItem('anime_sound_enabled') !== 'false',
+        apiBase: '/api',
+        pollIntervalMs: 3000,
+        hunting: false,
+        accounts: [],
+        health: {},
+        profile: { username: 'operator', email: '', rank: 'S-RANK HUNTER' },
+        settings: { poll_interval: 3, sound_enabled: true, discord_webhook: '', api_base: '/api' },
+        charts: {},
+        chartHistory: { labels: [], accounts: [], completion: [], proxies: [] },
+        isStreamPaused: false,
+        crtScanlines: true,
+        terminalLogs: [],
+        pollTimer: null
+      };
+
+      const THEMES = {
+        'purple-magic': { name: 'Purple Magic', badge: 'JUJUTSU KAISEN', character: 'Satoru Gojo', initials: 'SG', color: '#c77dff', fill: 'rgba(199,125,255,0.15)' },
+        'crimson-shadow': { name: 'Crimson Shadow', badge: 'DEATH NOTE', character: 'Ryuk & Light', initials: 'RL', color: '#ff2a4b', fill: 'rgba(255,42,75,0.15)' },
+        'neon-blue': { name: 'Neon Blue', badge: 'SOLO LEVELING', character: 'Sung Jin-woo', initials: 'JW', color: '#00f0ff', fill: 'rgba(0,240,255,0.15)' },
+        'cyber-neon': { name: 'Cyber Neon', badge: 'CYBERPUNK', character: 'Lucy & David', initials: 'LD', color: '#ffe600', fill: 'rgba(255,230,0,0.15)' }
+      };
+
+      // Sound
+      let audioCtx = null;
+      let hasUserInteracted = false;
+      window.addEventListener('pointerdown', () => { hasUserInteracted = true; }, { once: true });
+      window.addEventListener('keydown', () => { hasUserInteracted = true; }, { once: true });
+
+      function playSound(type) {
+        if (!state.soundEnabled || !hasUserInteracted) return;
+        try {
+          if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          if (!audioCtx) return;
+          const now = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          if (type === 'click') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(400, now + 0.05);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+            osc.start(now); osc.stop(now + 0.05);
+          } else if (type === 'theme') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(520, now);
+            osc.frequency.exponentialRampToValueAtTime(780, now + 0.15);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            osc.start(now); osc.stop(now + 0.2);
+          } else if (type === 'toggle-on' || type === 'toggle-off') {
+            osc.type = 'sawtooth';
+            if (type === 'toggle-on') {
+              osc.frequency.setValueAtTime(220, now);
+              osc.frequency.exponentialRampToValueAtTime(660, now + 0.18);
+            } else {
+              osc.frequency.setValueAtTime(550, now);
+              osc.frequency.exponentialRampToValueAtTime(180, now + 0.18);
+            }
+            gain.gain.setValueAtTime(0.09, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+            osc.start(now); osc.stop(now + 0.22);
+          }
+        } catch (e) {}
+      }
+
+      // Theme
+      function applyTheme(key, withSound) {
+        if (!THEMES[key]) key = 'purple-magic';
+        state.theme = key;
+        localStorage.setItem('anime_control_theme', key);
+        document.documentElement.setAttribute('data-theme', key);
+        const t = THEMES[key];
+        document.getElementById('current-theme-swatch').style.backgroundColor = t.color;
+        document.getElementById('current-theme-name').textContent = t.name;
+        document.getElementById('sidebar-theme-badge').textContent = '領域展開 // ' + t.badge;
+        document.getElementById('companion-name').textContent = t.character;
+        document.getElementById('companion-badge').textContent = t.badge;
+        document.getElementById('companion-avatar-icon').textContent = t.initials;
+        document.querySelectorAll('.theme-option').forEach(b => {
+          const v = b.getAttribute('data-theme-value');
+          const icon = b.querySelector('.theme-check-icon');
+          if (icon) {
+            icon.classList.toggle('opacity-100', v === key);
+            icon.classList.toggle('opacity-0', v !== key);
+          }
         });
+        updateChartTheme(t.color, t.fill);
+        if (withSound) playSound('theme');
+      }
 
-        // 🚨 Live Screen Auto Refresh
-        setInterval(() => {
-            const img = document.getElementById('live-screen');
-            const newSrc = `/api/live_screenshot?t=${new Date().getTime()}`;
+      function initTheme() {
+        const btn = document.getElementById('theme-dropdown-btn');
+        const menu = document.getElementById('theme-dropdown-menu');
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menu.classList.toggle('hidden');
+          playSound('click');
+        });
+        document.addEventListener('click', () => menu.classList.add('hidden'));
+        document.querySelectorAll('.theme-option').forEach(b => {
+          b.addEventListener('click', () => {
+            applyTheme(b.getAttribute('data-theme-value'), true);
+            menu.classList.add('hidden');
+          });
+        });
+        applyTheme(state.theme, false);
+      }
+
+      // Charts
+      function initCharts() {
+        if (typeof Chart === 'undefined') return;
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.font.family = "'JetBrains Mono', monospace";
+        Chart.defaults.font.size = 10;
+        const t = THEMES[state.theme];
+        const common = {
+          responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', maxRotation: 0 } },
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b' } }
+          }
+        };
+        state.charts.accounts = new Chart(document.getElementById('chart-accounts'), {
+          type: 'line',
+          data: { labels: [], datasets: [{ label: 'Accounts', data: [], borderColor: t.color, backgroundColor: t.fill, fill: true, tension: 0.4, pointRadius: 2, pointBackgroundColor: t.color }] },
+          options: common
+        });
+        state.charts.completion = new Chart(document.getElementById('chart-completion'), {
+          type: 'line',
+          data: { labels: [], datasets: [{ label: 'Completion %', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.15)', fill: true, tension: 0.3, pointRadius: 2, pointBackgroundColor: '#10b981' }] },
+          options: Object.assign({}, common, { scales: { x: common.scales.x, y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', callback: v => v + '%' } } } })
+        });
+        state.charts.proxies = new Chart(document.getElementById('chart-proxies'), {
+          type: 'bar',
+          data: { labels: [], datasets: [{ label: 'Proxies', data: [], backgroundColor: '#00f0ff', borderRadius: 4 }] },
+          options: Object.assign({}, common, { scales: { x: common.scales.x, y: { min: 0, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', precision: 0 } } } })
+        });
+      }
+
+      function updateChartTheme(color, fill) {
+        if (state.charts.accounts) {
+          state.charts.accounts.data.datasets[0].borderColor = color;
+          state.charts.accounts.data.datasets[0].backgroundColor = fill;
+          state.charts.accounts.data.datasets[0].pointBackgroundColor = color;
+          state.charts.accounts.update();
+        }
+      }
+
+      function pushChartHistory(accounts, completion, proxies) {
+        const now = new Date();
+        const label = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        const h = state.chartHistory;
+        ['labels','accounts','completion','proxies'].forEach(k => {});
+        h.labels.push(label);
+        h.accounts.push(accounts);
+        h.completion.push(parseFloat(completion) || 0);
+        h.proxies.push(proxies);
+        if (h.labels.length > 20) {
+          h.labels.shift(); h.accounts.shift(); h.completion.shift(); h.proxies.shift();
+        }
+        if (state.charts.accounts) {
+          state.charts.accounts.data.labels = h.labels.slice();
+          state.charts.accounts.data.datasets[0].data = h.accounts.slice();
+          state.charts.accounts.update('none');
+        }
+        if (state.charts.completion) {
+          state.charts.completion.data.labels = h.labels.slice();
+          state.charts.completion.data.datasets[0].data = h.completion.slice();
+          state.charts.completion.update('none');
+        }
+        if (state.charts.proxies) {
+          state.charts.proxies.data.labels = h.labels.slice();
+          state.charts.proxies.data.datasets[0].data = h.proxies.slice();
+          state.charts.proxies.update('none');
+        }
+      }
+
+      // API calls
+      async function apiGet(path) {
+        const res = await fetch(state.apiBase + path, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      }
+      async function apiPost(path, body) {
+        const res = await fetch(state.apiBase + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(body || {})
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      }
+
+      // Render
+      function renderHealth(data) {
+        state.health = data;
+        state.hunting = !!data.hunting_enabled;
+        document.getElementById('metric-accounts-count').textContent = data.accounts_count || 0;
+        document.getElementById('metric-active-accounts').textContent = (data.active_accounts || 0) + ' active';
+        document.getElementById('metric-completion-rate').textContent = (data.completion_rate || 0) + '%';
+        document.getElementById('metric-rate-detail').textContent = (data.active_accounts || 0) + '/' + (data.accounts_count || 0);
+        document.getElementById('metric-active-proxies').textContent = data.working_proxies || 0;
+        document.getElementById('metric-hunting-state').textContent = state.hunting ? 'ON' : 'OFF';
+        document.getElementById('metric-hunting-detail').textContent = state.hunting ? 'Running' : 'Paused';
+        document.getElementById('metric-hunting-detail').className = state.hunting ? 'text-emerald-400' : 'text-red-400';
+        document.getElementById('sidebar-accounts-metric').textContent = data.accounts_count || 0;
+        document.getElementById('sidebar-proxies-metric').textContent = data.working_proxies || 0;
+        const shm = document.getElementById('sidebar-hunting-metric');
+        shm.textContent = state.hunting ? 'ON' : 'OFF';
+        shm.className = state.hunting ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold';
+        document.getElementById('live-task-title').textContent = data.task || 'Idle';
+        document.getElementById('live-task-detail').textContent = data.detail || 'Waiting...';
+        if (data.last_update) {
+          const ago = Math.floor(Date.now()/1000 - data.last_update);
+          document.getElementById('last-update-display').textContent = ago < 60 ? ago + 's ago' : Math.floor(ago/60) + 'm ago';
+        }
+        updateWorkerButtonUI();
+        pushChartHistory(data.accounts_count || 0, data.completion_rate || 0, data.working_proxies || 0);
+        document.getElementById('nav-vault-count').textContent = data.accounts_count || 0;
+      }
+
+      function renderAccounts(payload) {
+        const accounts = payload.accounts || [];
+        state.accounts = accounts;
+        const tbody = document.getElementById('accounts-table-body');
+        if (!accounts.length) {
+          tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500 font-mono text-xs">No accounts yet. Use /tglogin in Telegram bot.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = '';
+        accounts.forEach(acc => {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-white/5 transition-colors';
+          let statusClass = 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30';
+          if (acc.status === 'logging_in') statusClass = 'text-amber-400 bg-amber-950/60 border-amber-500/30';
+          else if (acc.status === 'waiting_7_days') statusClass = 'text-orange-400 bg-orange-950/60 border-orange-500/30';
+          else if (acc.status === 'failed') statusClass = 'text-red-400 bg-red-950/60 border-red-500/30';
+          else if (acc.status === 'unknown') statusClass = 'text-slate-400 bg-slate-900 border-slate-700';
+          tr.innerHTML = `
+            <td class="p-3.5 font-bold text-white">${escapeHTML(acc.phone)}</td>
+            <td class="p-3.5"><span class="px-2 py-0.5 rounded-full border text-[10px] font-semibold ${statusClass}">${escapeHTML(acc.status)}</span></td>
+            <td class="p-3.5 text-slate-400">${escapeHTML(acc.session)}</td>
+            <td class="p-3.5 text-slate-500">${escapeHTML(acc.device_id)}</td>
+            <td class="p-3.5 text-slate-300">${escapeHTML(acc.ai_task)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function renderFeed(feed) {
+        const box = document.getElementById('activity-feed-list');
+        if (!feed || !feed.length) {
+          box.innerHTML = `<div class="p-3 rounded-xl border border-white/10 bg-black/40 text-slate-500 text-xs font-mono text-center">No activity yet.</div>`;
+          return;
+        }
+        box.innerHTML = '';
+        const cfg = {
+          connecting: { c: 'text-cyan-400', bg: 'bg-cyan-950/40 border-cyan-500/30', i: 'fa-satellite-dish' },
+          default: { c: 'text-purple-400', bg: 'bg-purple-950/40 border-purple-500/30', i: 'fa-bolt' }
+        };
+        feed.slice(0, 30).forEach(item => {
+          const el = document.createElement('div');
+          el.className = `p-2.5 rounded-xl border ${cfg.default.bg} flex items-start space-x-2.5 text-xs font-mono`;
+          const ago = item.time ? Math.floor(Date.now()/1000 - item.time) : 0;
+          const agoStr = ago < 60 ? ago + 's ago' : Math.floor(ago/60) + 'm ago';
+          el.innerHTML = `
+            <div class="mt-0.5 w-6 h-6 rounded-lg bg-black/60 flex items-center justify-center flex-shrink-0 ${cfg.default.c}">
+              <i class="fa-solid ${cfg.default.i} text-xs"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <span class="font-bold ${cfg.default.c} truncate">${escapeHTML(item.task || '')}</span>
+                <span class="text-[10px] text-slate-500 flex-shrink-0 ml-2">${agoStr}</span>
+              </div>
+              <div class="text-slate-300 text-[11px] mt-0.5 break-all">${escapeHTML(item.detail || '')}</div>
+            </div>
+          `;
+          box.appendChild(el);
+        });
+      }
+
+      function updateWorkerButtonUI() {
+        const btn = document.getElementById('worker-toggle-btn');
+        const label = document.getElementById('worker-toggle-label');
+        const sysText = document.getElementById('system-status-text');
+        const sysDot = document.getElementById('system-status-dot');
+        const sysPing = document.getElementById('system-status-ping-dot');
+        if (state.hunting) {
+          label.textContent = 'WORKER: RUNNING';
+          btn.style.background = 'linear-gradient(135deg, var(--accent-secondary), var(--accent-main))';
+          btn.style.boxShadow = '0 0 20px var(--accent-glow)';
+          sysText.textContent = 'ACTIVE';
+          if (sysDot) sysDot.style.backgroundColor = 'var(--accent-main)';
+          if (sysPing) sysPing.style.backgroundColor = 'var(--accent-main)';
+        } else {
+          label.textContent = 'WORKER: PAUSED';
+          btn.style.background = 'rgba(255,255,255,0.1)';
+          btn.style.boxShadow = 'none';
+          sysText.textContent = 'PAUSED';
+          if (sysDot) sysDot.style.backgroundColor = '#94a3b8';
+          if (sysPing) sysPing.style.backgroundColor = '#94a3b8';
+        }
+      }
+
+      async function toggleWorker() {
+        const nextState = !state.hunting;
+        try {
+          const res = await apiPost('/toggle_hunting', { action: nextState ? 'start' : 'stop' });
+          state.hunting = !!res.enabled;
+        } catch (e) {
+          state.hunting = nextState;
+        }
+        updateWorkerButtonUI();
+        playSound(state.hunting ? 'toggle-on' : 'toggle-off');
+        logTerminal(`[WORKER] ${state.hunting ? 'RUNNING' : 'PAUSED'}`, state.hunting ? 'success' : 'warn');
+        fetchHealth();
+      }
+
+      // Live screenshot
+      function refreshScreenshot() {
+        if (state.isStreamPaused) return;
+        const ts = Date.now();
+        ['live-screen', 'live-screen-full'].forEach(id => {
+          const img = document.getElementById(id);
+          if (!img) return;
+          const newSrc = state.apiBase + '/live_screenshot?t=' + ts;
+          const test = new Image();
+          test.onload = () => {
             img.src = newSrc;
-        }, 3000); // Har 3 second me update hoga
-
-        let huntingState = false;
-
-        async function fetchHuntingState() {
-            try {
-                const res = await fetch('/api/hunting_status');
-                const data = await res.json();
-                huntingState = data.enabled;
-                const btn = document.getElementById('hunting-btn');
-                const status = document.getElementById('hunting-status');
-                if (huntingState) {
-                    btn.textContent = 'HUNTING ON';
-                    btn.className = 'px-8 py-3 rounded-xl font-bold text-white bg-green-600 text-lg shadow-lg';
-                    status.textContent = '✅ AI is hunting all devices non-stop!';
-                } else {
-                    btn.textContent = 'HUNTING OFF';
-                    btn.className = 'px-8 py-3 rounded-xl font-bold text-white bg-red-600 text-lg shadow-lg';
-                    status.textContent = '⏸ AI is sleeping. Turn ON to start.';
-                }
-            } catch (e) { console.error(e); }
-        }
-
-        async function toggleHunting() {
-            await fetch('/api/toggle_hunting', { method: 'POST' });
-            fetchHuntingState();
-        }
-
-        async function fetchData() {
-            try {
-                const accountsRes = await fetch('/api/get_accounts');
-                const accountsData = await accountsRes.json();
-                if (accountsData.status === 'success') {
-                    document.getElementById('accounts-count').textContent = accountsData.accounts.length;
-                }
-
-                const healthRes = await fetch('/api/health');
-                const healthData = await healthRes.json();
-                document.getElementById('proxies-count').textContent = healthData.working_proxies;
-                document.getElementById('live-task').textContent = healthData.task;
-                document.getElementById('live-detail').textContent = healthData.detail;
-                
-                // Update Activity Feed
-                const feed = document.getElementById('activity-feed');
-                if (healthData.detail && healthData.detail !== "Waiting...") {
-                     const newItem = document.createElement('div');
-                     newItem.className = "p-2 rounded bg-black/30 border border-gray-700 text-white";
-                     newItem.innerHTML = `<span class="text-accent font-mono text-xs">${new Date().toLocaleTimeString()}</span> - ${healthData.detail}`;
-                     if (feed.firstChild && feed.firstChild.innerText === "Waiting for activity...") {
-                         feed.innerHTML = ''; // Remove placeholder
-                     }
-                     feed.prepend(newItem);
-                     // Keep only last 20 items
-                     if (feed.children.length > 20) feed.removeChild(feed.lastChild);
-                }
-
-            } catch (e) { console.error(e); }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchHuntingState();
-            fetchData();
-            setInterval(fetchData, 3000); // Update every 3 seconds
+            img.classList.remove('hidden');
+            const ph = document.getElementById(id + (id === 'live-screen' ? '-placeholder' : '-placeholder'));
+            const ph2 = document.getElementById(id === 'live-screen' ? 'screen-placeholder' : 'live-screen-full-placeholder');
+            if (ph2) ph2.classList.add('hidden');
+          };
+          test.onerror = () => {
+            img.classList.add('hidden');
+            const ph2 = document.getElementById(id === 'live-screen' ? 'screen-placeholder' : 'live-screen-full-placeholder');
+            if (ph2) ph2.classList.remove('hidden');
+          };
+          test.src = newSrc;
         });
-    </script>
+      }
+
+      // Terminal
+      function logTerminal(msg, type) {
+        type = type || 'info';
+        const out = document.getElementById('terminal-output');
+        if (!out) return;
+        const now = new Date();
+        const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        const colorMap = { info: 'text-slate-400', warn: 'text-amber-400', error: 'text-red-400', success: 'text-emerald-400', theme: 'text-purple-400', cmd: 'text-cyan-400' };
+        const badgeMap = { info: '[SYSTEM]', warn: '[WARN]', error: '[ERROR]', success: '[OK]', theme: '[THEME]', cmd: '[EXEC]' };
+        const line = document.createElement('div');
+        line.className = 'flex items-start space-x-2 text-[11px] leading-snug';
+        line.innerHTML = `<span class="text-slate-600 select-none flex-shrink-0">[${time}]</span><span class="${colorMap[type]} font-bold flex-shrink-0">${badgeMap[type]}</span><span class="text-slate-300 break-all">${escapeHTML(msg)}</span>`;
+        out.appendChild(line);
+        out.scrollTop = out.scrollHeight;
+        state.terminalLogs.push(`[${time}] ${badgeMap[type]} ${msg}`);
+        if (state.terminalLogs.length > 200) state.terminalLogs.shift();
+      }
+
+      async function runTerminalCommand(cmd) {
+        const parts = cmd.trim().split(/\s+/);
+        const c = parts[0].toLowerCase();
+        const arg = parts[1] ? parts[1].toLowerCase() : '';
+        switch (c) {
+          case 'help':
+            logTerminal('Commands: help, status, start, stop, theme <name>, ping, accounts, clear', 'info');
+            break;
+          case 'status':
+            logTerminal(`Hunting: ${state.hunting ? 'ON' : 'OFF'} | Theme: ${state.theme} | Accounts: ${state.health.accounts_count || 0} | Proxies: ${state.health.working_proxies || 0}`, 'info');
+            break;
+          case 'start':
+            if (!state.hunting) await toggleWorker(); else logTerminal('Already running.', 'warn');
+            break;
+          case 'stop':
+            if (state.hunting) await toggleWorker(); else logTerminal('Already paused.', 'warn');
+            break;
+          case 'theme':
+            if (arg && THEMES[arg]) { applyTheme(arg, true); logTerminal('Theme applied: ' + THEMES[arg].name, 'success'); }
+            else logTerminal('Available: ' + Object.keys(THEMES).join(', '), 'error');
+            break;
+          case 'ping':
+            try {
+              const t0 = performance.now();
+              await apiGet('/health');
+              logTerminal(`Pong: ${Math.round(performance.now() - t0)}ms`, 'success');
+            } catch (e) { logTerminal('Ping failed: ' + e.message, 'error'); }
+            break;
+          case 'accounts':
+            logTerminal(`Total accounts: ${state.accounts.length}`, 'info');
+            break;
+          case 'clear':
+            document.getElementById('terminal-output').innerHTML = '';
+            state.terminalLogs = [];
+            break;
+          default:
+            logTerminal(`Unknown: "${c}". Type "help".`, 'error');
+        }
+      }
+
+      // Navigation
+      function initNavigation() {
+        const btns = document.querySelectorAll('.nav-link');
+        const panels = document.querySelectorAll('.view-panel');
+        const title = document.getElementById('topbar-current-view');
+        const sidebar = document.getElementById('app-sidebar');
+        const backdrop = document.getElementById('sidebar-backdrop');
+        btns.forEach(b => {
+          b.addEventListener('click', () => {
+            const t = b.getAttribute('data-nav-target');
+            if (!t) return;
+            playSound('click');
+            btns.forEach(x => {
+              x.classList.remove('active');
+              x.style.background = 'transparent';
+              x.style.borderColor = 'transparent';
+              x.style.color = '#94a3b8';
+              x.style.boxShadow = 'none';
+            });
+            b.classList.add('active');
+            b.style.background = 'var(--bg-card)';
+            b.style.borderColor = 'var(--accent-main)';
+            b.style.color = 'var(--accent-main)';
+            b.style.boxShadow = '0 0 15px var(--accent-glow)';
+            panels.forEach(p => p.classList.add('hidden'));
+            const target = document.getElementById('view-' + t);
+            if (target) target.classList.remove('hidden');
+            title.textContent = t.replace('-', ' ').toUpperCase();
+            if (window.innerWidth < 1024 && sidebar && backdrop) {
+              sidebar.classList.add('-translate-x-full');
+              backdrop.classList.add('hidden');
+            }
+          });
+        });
+        document.getElementById('sidebar-toggle-btn').addEventListener('click', () => {
+          sidebar.classList.remove('-translate-x-full');
+          backdrop.classList.remove('hidden');
+        });
+        document.getElementById('sidebar-collapse-btn').addEventListener('click', () => {
+          sidebar.classList.add('-translate-x-full');
+          backdrop.classList.add('hidden');
+        });
+        backdrop.addEventListener('click', () => {
+          sidebar.classList.add('-translate-x-full');
+          backdrop.classList.add('hidden');
+        });
+        document.getElementById('topbar-user-profile-btn').addEventListener('click', () => {
+          const el = document.querySelector('[data-nav-target="user-profile"]');
+          if (el) el.click();
+        });
+      }
+
+      // Profile
+      async function loadProfile() {
+        try {
+          const res = await apiGet('/get_profile');
+          state.profile = res.profile || state.profile;
+          applyProfileUI();
+        } catch (e) { logTerminal('[PROFILE] Load failed: ' + e.message, 'error'); }
+      }
+      function applyProfileUI() {
+        const p = state.profile;
+        document.getElementById('prof-input-username').value = p.username || '';
+        document.getElementById('prof-input-email').value = p.email || '';
+        document.getElementById('prof-input-rank').value = p.rank || 'S-RANK HUNTER';
+        const initials = (p.username || 'OP').substring(0, 2).toUpperCase();
+        document.getElementById('topbar-user-initials').textContent = initials;
+        document.getElementById('topbar-user-rank').textContent = (p.rank || 'S-RANK').split(' ')[0];
+        document.getElementById('topbar-user-handle').textContent = '@' + (p.username || 'operator');
+      }
+      function initProfile() {
+        document.getElementById('profile-edit-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const username = document.getElementById('prof-input-username').value.trim();
+          const email = document.getElementById('prof-input-email').value.trim();
+          const rank = document.getElementById('prof-input-rank').value;
+          const err = document.getElementById('profile-form-error');
+          if (username.length < 3) { err.textContent = 'Username must be >= 3 chars'; err.classList.remove('hidden'); return; }
+          if (!email.includes('@')) { err.textContent = 'Invalid email'; err.classList.remove('hidden'); return; }
+          err.classList.add('hidden');
+          try {
+            const res = await apiPost('/save_profile', { username, email, rank });
+            state.profile = res.profile;
+            applyProfileUI();
+            const toast = document.getElementById('profile-save-indicator');
+            toast.style.opacity = '1';
+            setTimeout(() => toast.style.opacity = '0', 2000);
+            playSound('theme');
+            logTerminal('[PROFILE] Saved: @' + username, 'success');
+          } catch (e2) {
+            err.textContent = 'Save failed: ' + e2.message;
+            err.classList.remove('hidden');
+          }
+        });
+      }
+
+      // Settings
+      async function loadSettings() {
+        try {
+          const res = await apiGet('/get_settings');
+          state.settings = res.settings || state.settings;
+          applySettingsUI();
+        } catch (e) { logTerminal('[SETTINGS] Load failed: ' + e.message, 'error'); }
+      }
+      function applySettingsUI() {
+        const s = state.settings;
+        document.getElementById('cfg-sound').checked = !!s.sound_enabled;
+        document.getElementById('cfg-discord-webhook').value = s.discord_webhook || '';
+        document.getElementById('cfg-api-base').value = s.api_base || '/api';
+        document.getElementById('cfg-poll-interval').value = s.poll_interval || 3;
+        state.soundEnabled = !!s.sound_enabled;
+        state.apiBase = s.api_base || '/api';
+        state.pollIntervalMs = (s.poll_interval || 3) * 1000;
+        document.getElementById('audio-icon').className = state.soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
+      }
+      function initSettings() {
+        document.getElementById('settings-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const payload = {
+            sound_enabled: document.getElementById('cfg-sound').checked,
+            discord_webhook: document.getElementById('cfg-discord-webhook').value.trim(),
+            api_base: document.getElementById('cfg-api-base').value.trim() || '/api',
+            poll_interval: parseInt(document.getElementById('cfg-poll-interval').value) || 3
+          };
+          try {
+            const res = await apiPost('/save_settings', payload);
+            state.settings = res.settings;
+            applySettingsUI();
+            const toast = document.getElementById('settings-save-indicator');
+            toast.style.opacity = '1';
+            setTimeout(() => toast.style.opacity = '0', 2000);
+            playSound('theme');
+            logTerminal('[SETTINGS] Saved', 'success');
+            restartPolling();
+          } catch (e2) {
+            logTerminal('[SETTINGS] Save failed: ' + e2.message, 'error');
+          }
+        });
+        document.getElementById('audio-toggle-btn').addEventListener('click', async () => {
+          state.soundEnabled = !state.soundEnabled;
+          document.getElementById('audio-icon').className = state.soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
+          localStorage.setItem('anime_sound_enabled', state.soundEnabled ? 'true' : 'false');
+          playSound('click');
+          try { await apiPost('/save_settings', Object.assign({}, state.settings, { sound_enabled: state.soundEnabled })); } catch (e) {}
+        });
+      }
+
+      // Polling
+      async function fetchHealth() {
+        try {
+          const data = await apiGet('/health');
+          renderHealth(data);
+          document.getElementById('footer-connection').textContent = 'CONNECTED';
+          document.getElementById('footer-connection').className = 'text-emerald-400';
+        } catch (e) {
+          document.getElementById('footer-connection').textContent = 'DISCONNECTED';
+          document.getElementById('footer-connection').className = 'text-red-400';
+        }
+      }
+      async function fetchAccounts() {
+        try {
+          const data = await apiGet('/get_accounts');
+          renderAccounts(data);
+        } catch (e) {
+          logTerminal('[VAULT] Load failed: ' + e.message, 'error');
+        }
+      }
+      async function fetchFeed() {
+        try {
+          const data = await apiGet('/activity_feed');
+          renderFeed(data.feed);
+        } catch (e) {}
+      }
+
+      function restartPolling() {
+        if (state.pollTimer) clearInterval(state.pollTimer);
+        state.pollTimer = setInterval(async () => {
+          await fetchHealth();
+          await fetchFeed();
+        }, state.pollIntervalMs);
+      }
+
+      // Helpers
+      function escapeHTML(s) {
+        if (s === undefined || s === null) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      }
+
+      // Init
+      document.addEventListener('DOMContentLoaded', async () => {
+        initTheme();
+        initNavigation();
+        initCharts();
+        initProfile();
+        initSettings();
+
+        await loadProfile();
+        await loadSettings();
+        await fetchHealth();
+        await fetchAccounts();
+        await fetchFeed();
+
+        restartPolling();
+        setInterval(refreshScreenshot, 3000);
+        setInterval(fetchAccounts, 10000);
+        refreshScreenshot();
+
+        document.getElementById('worker-toggle-btn').addEventListener('click', toggleWorker);
+        document.getElementById('btn-refresh-accounts').addEventListener('click', fetchAccounts);
+        document.getElementById('btn-export-vault').addEventListener('click', () => {
+          const blob = new Blob([JSON.stringify(state.accounts, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'aether_vault_accounts.json';
+          a.click();
+          URL.revokeObjectURL(a.href);
+        });
+        document.getElementById('btn-refresh-screenshot').addEventListener('click', refreshScreenshot);
+        document.getElementById('btn-clear-feed').addEventListener('click', async () => {
+          try { await apiPost('/clear_feed', {}); await fetchFeed(); playSound('click'); } catch (e) {}
+        });
+        document.getElementById('btn-clear-terminal').addEventListener('click', () => {
+          document.getElementById('terminal-output').innerHTML = '';
+          state.terminalLogs = [];
+          playSound('click');
+        });
+        document.getElementById('btn-copy-terminal').addEventListener('click', () => {
+          navigator.clipboard.writeText(state.terminalLogs.join('\n')).then(() => logTerminal('[CLIPBOARD] Copied', 'success'));
+        });
+        document.getElementById('terminal-command-form').addEventListener('submit', (e) => {
+          e.preventDefault();
+          const input = document.getElementById('terminal-command-input');
+          const val = input.value.trim();
+          if (!val) return;
+          logTerminal('operator@aether:~$ ' + val, 'cmd');
+          input.value = '';
+          playSound('click');
+          runTerminalCommand(val);
+        });
+
+        const pauseBtn = document.getElementById('btn-pause-stream');
+        pauseBtn.addEventListener('click', () => {
+          state.isStreamPaused = !state.isStreamPaused;
+          document.getElementById('pause-stream-icon').className = state.isStreamPaused ? 'fa-solid fa-play text-xs' : 'fa-solid fa-pause text-xs';
+          document.getElementById('pause-stream-text').textContent = state.isStreamPaused ? 'Resume' : 'Pause';
+          playSound('click');
+        });
+        document.getElementById('btn-toggle-crt').addEventListener('click', () => {
+          state.crtScanlines = !state.crtScanlines;
+          document.getElementById('screen-viewport').classList.toggle('crt-overlay', state.crtScanlines);
+          playSound('click');
+        });
+        document.getElementById('btn-fullscreen-monitor').addEventListener('click', () => {
+          const c = document.getElementById('cctv-monitor-container');
+          if (!document.fullscreenElement) c.requestFullscreen().catch(() => {});
+          else document.exitFullscreen().catch(() => {});
+        });
+
+        logTerminal('[BOOT] AetherOps Control Panel initialized', 'success');
+        logTerminal('[SYSTEM] Backend connected: /api/health', 'info');
+        logTerminal('[CHART] Real-time telemetry from backend', 'info');
+      });
+
+    })();
+  </script>
 </body>
-</html>
+    </html>
