@@ -1,103 +1,177 @@
 <!DOCTYPE html>
 <html data-theme="jjk" lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Dark OTP Bot — AI SaaS Manager</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet"/>
-<style>
-    :root, [data-theme="jjk"] { --bg-base: #07040d; --bg-surface: #0e0919; --bg-card: rgba(23, 14, 41, 0.72); --border-subtle: rgba(139, 92, 246, 0.22); --primary: #8b5cf6; --accent: #38bdf8; --text-main: #f3f0ff; --text-muted: #9d8ec2; }
-    body { background-color: var(--bg-base); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; background-image: radial-gradient(circle at 15% 15%, rgba(139,92,246,0.15) 0%, transparent 40%), radial-gradient(circle at 85% 85%, rgba(56,189,248,0.15) 0%, transparent 40%); }
-    .theme-card { background-color: var(--bg-card); border: 1px solid var(--border-subtle); backdrop-filter: blur(16px); }
-    .theme-card:hover { border-color: var(--accent); }
-</style>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Dark OTP Bot — AI SaaS Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root, [data-theme="jjk"] { --bg-base: #07040d; --bg-surface: #0e0919; --bg-card: rgba(23, 14, 41, 0.72); --border-subtle: rgba(139, 92, 246, 0.22); --primary: #8b5cf6; --accent: #38bdf8; --text-main: #f3f0ff; --text-muted: #9d8ec2; }
+        [data-theme="deathnote"] { --bg-base: #0a0000; --bg-surface: #1a0000; --bg-card: rgba(40, 0, 0, 0.72); --border-subtle: rgba(225, 29, 72, 0.22); --primary: #e11d48; --accent: #ff6b6b; --text-main: #fff; --text-muted: #c29d9d; }
+        [data-theme="solo"] { --bg-base: #000a1a; --bg-surface: #00142e; --bg-card: rgba(0, 20, 46, 0.72); --border-subtle: rgba(56, 189, 248, 0.22); --primary: #0ea5e9; --accent: #38bdf8; --text-main: #e0f2fe; --text-muted: #7dd3fc; }
+        [data-theme="cyber"] { --bg-base: #0a0a0a; --bg-surface: #141414; --bg-card: rgba(20, 20, 20, 0.72); --border-subtle: rgba(250, 204, 21, 0.22); --primary: #facc15; --accent: #22d3ee; --text-main: #fff; --text-muted: #a1a1aa; }
+        
+        body { background-color: var(--bg-base); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; transition: all 0.3s; }
+        .theme-card { background-color: var(--bg-card); border: 1px solid var(--border-subtle); backdrop-filter: blur(16px); transition: all 0.3s;}
+        .theme-card:hover { border-color: var(--accent); box-shadow: 0 0 15px var(--border-subtle); }
+        .text-accent { color: var(--accent); }
+        .bg-primary { background-color: var(--primary); }
+        .bg-accent { background-color: var(--accent); }
+    </style>
 </head>
 <body class="min-h-screen flex flex-col overflow-hidden">
 
-<header class="h-16 w-full border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 backdrop-blur-xl flex items-center justify-between px-5">
-    <span class="font-bold text-lg" style="color: var(--accent);">DARK OTP BOT</span>
-    <a href="/telegram" class="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-xs font-bold">Open Telegram UI</a>
-</header>
-
-<main class="flex-1 overflow-y-auto p-6 space-y-6">
-
-    <!-- Hunting Control -->
-    <div class="theme-card rounded-2xl p-6 flex items-center justify-between">
-        <div>
-            <h2 class="text-xl font-bold" style="color: var(--accent);">AI GHATAK HUNTER</h2>
-            <p class="text-xs text-gray-400 mt-1" id="hunting-status">Loading status...</p>
+    <!-- Header -->
+    <header class="h-16 w-full border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 backdrop-blur-xl flex items-center justify-between px-5 z-50">
+        <div class="flex items-center gap-3">
+            <span class="font-bold text-xl text-accent" style="font-family: 'Orbitron';">DARK OTP BOT</span>
+            <span class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs border border-green-500/50">SYSTEM ONLINE</span>
         </div>
-        <button id="hunting-btn" onclick="toggleHunting()" class="px-8 py-3 rounded-xl font-bold text-white bg-red-600 text-lg">CHECKING...</button>
-    </div>
-
-    <!-- Stats -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="theme-card rounded-2xl p-5">
-            <span class="text-xs text-gray-400 uppercase">Active Accounts</span>
-            <div class="text-3xl font-black mt-2" id="accounts-count">0</div>
+        <div class="flex items-center gap-4">
+            <select id="themeSelector" class="bg-black/50 text-white border border-gray-600 rounded px-3 py-1 text-sm outline-none">
+                <option value="jjk">Jujutsu Kaisen</option>
+                <option value="deathnote">Death Note</option>
+                <option value="solo">Solo Leveling</option>
+                <option value="cyber">Cyberpunk</option>
+            </select>
+            <a href="/telegram" class="px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold shadow-lg">Telegram UI</a>
         </div>
-        <div class="theme-card rounded-2xl p-5">
-            <span class="text-xs text-gray-400 uppercase">Working Proxies</span>
-            <div class="text-3xl font-black mt-2" id="proxies-count">0</div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+        <!-- Top Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="theme-card rounded-2xl p-5">
+                <span class="text-xs text-[var(--text-muted)] uppercase font-bold">Total Logged In</span>
+                <div class="text-3xl font-black mt-2" id="accounts-count">0</div>
+            </div>
+            <div class="theme-card rounded-2xl p-5">
+                <span class="text-xs text-[var(--text-muted)] uppercase font-bold">Working Proxies</span>
+                <div class="text-3xl font-black mt-2" id="proxies-count">0</div>
+            </div>
+            <div class="theme-card rounded-2xl p-5">
+                <span class="text-xs text-[var(--text-muted)] uppercase font-bold">System Task</span>
+                <div class="text-lg font-bold mt-2 text-accent" id="live-task">Idle</div>
+                <p class="text-xs mt-1 text-[var(--text-muted)]" id="live-detail">Waiting...</p>
+            </div>
         </div>
-    </div>
 
-    <!-- Live Status -->
-    <div class="theme-card rounded-2xl p-6">
-        <h3 class="text-sm font-bold mb-3" style="color: var(--accent);">AI LIVE ACTIVITY</h3>
-        <p class="text-xs font-mono" id="live-detail">Waiting for data...</p>
-    </div>
+        <!-- Main Grid: Live Screen & Feed -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- 🔴 Live Browser Screen -->
+            <div class="theme-card rounded-2xl p-4 flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-accent uppercase" style="font-family: 'Orbitron';">Live AI Browser</h3>
+                    <span class="flex items-center gap-1 text-xs text-red-500"><span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> REC</span>
+                </div>
+                <!-- Live Image from Backend -->
+                <div class="flex-1 bg-black rounded-xl overflow-hidden relative border border-gray-700 min-h-[300px] flex items-center justify-center">
+                    <img id="live-screen" src="/api/live_screenshot" alt="Waiting for AI..." class="w-full h-full object-contain" onerror="this.style.display='none'; document.getElementById('screen-placeholder').style.display='block';" onload="this.style.display='block'; document.getElementById('screen-placeholder').style.display='none';"/>
+                    <div id="screen-placeholder" class="text-gray-500 text-sm absolute">Waiting for AI to start browser...</div>
+                </div>
+            </div>
 
-</main>
+            <!-- Activity Feed -->
+            <div class="theme-card rounded-2xl p-4 flex flex-col">
+                <h3 class="text-sm font-bold text-accent mb-3 uppercase" style="font-family: 'Orbitron';">Activity Feed</h3>
+                <div class="flex-1 overflow-y-auto space-y-2 text-sm" id="activity-feed">
+                    <div class="p-2 rounded bg-black/30 border border-gray-700 text-gray-400">Waiting for activity...</div>
+                </div>
+            </div>
 
-<script>
-    let huntingState = false;
+        </div>
 
-    async function fetchHuntingState() {
-        try {
-            const res = await fetch('/api/hunting_status');
-            const data = await res.json();
-            huntingState = data.enabled;
-            const btn = document.getElementById('hunting-btn');
-            const status = document.getElementById('hunting-status');
-            if (huntingState) {
-                btn.textContent = 'HUNTING ON';
-                btn.className = 'px-8 py-3 rounded-xl font-bold text-white bg-green-600 text-lg';
-                status.textContent = '✅ AI is hunting all devices non-stop!';
-            } else {
-                btn.textContent = 'HUNTING OFF';
-                btn.className = 'px-8 py-3 rounded-xl font-bold text-white bg-red-600 text-lg';
-                status.textContent = '⏸ AI is sleeping. Turn ON to start.';
-            }
-        } catch (e) { console.error(e); }
-    }
+        <!-- Hunting Toggle -->
+        <div class="theme-card rounded-2xl p-6 flex items-center justify-between">
+            <div>
+                <h2 class="text-xl font-bold text-accent">AI GHATAK HUNTER</h2>
+                <p class="text-xs text-[var(--text-muted)] mt-1" id="hunting-status">Loading status...</p>
+            </div>
+            <button id="hunting-btn" onclick="toggleHunting()" class="px-8 py-3 rounded-xl font-bold text-white bg-red-600 text-lg shadow-lg">CHECKING...</button>
+        </div>
 
-    async function toggleHunting() {
-        await fetch('/api/toggle_hunting', { method: 'POST' });
-        fetchHuntingState();
-    }
+    </main>
 
-    async function fetchData() {
-        try {
-            const accountsRes = await fetch('/api/get_accounts');
-            const accountsData = await accountsRes.json();
-            if (accountsData.status === 'success') {
-                document.getElementById('accounts-count').textContent = accountsData.accounts.length;
-            }
+    <script>
+        // 🚨 Theme Logic
+        const themeSelector = document.getElementById('themeSelector');
+        themeSelector.addEventListener('change', (e) => {
+            document.documentElement.setAttribute('data-theme', e.target.value);
+        });
 
-            const healthRes = await fetch('/api/health');
-            const healthData = await healthRes.json();
-            document.getElementById('proxies-count').textContent = healthData.working_proxies;
-            document.getElementById('live-detail').textContent = `${healthData.task} — ${healthData.detail}`;
-        } catch (e) { console.error(e); }
-    }
+        // 🚨 Live Screen Auto Refresh
+        setInterval(() => {
+            const img = document.getElementById('live-screen');
+            const newSrc = `/api/live_screenshot?t=${new Date().getTime()}`;
+            img.src = newSrc;
+        }, 3000); // Har 3 second me update hoga
 
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchHuntingState();
-        fetchData();
-        setInterval(fetchData, 5000);
-    });
-</script>
+        let huntingState = false;
+
+        async function fetchHuntingState() {
+            try {
+                const res = await fetch('/api/hunting_status');
+                const data = await res.json();
+                huntingState = data.enabled;
+                const btn = document.getElementById('hunting-btn');
+                const status = document.getElementById('hunting-status');
+                if (huntingState) {
+                    btn.textContent = 'HUNTING ON';
+                    btn.className = 'px-8 py-3 rounded-xl font-bold text-white bg-green-600 text-lg shadow-lg';
+                    status.textContent = '✅ AI is hunting all devices non-stop!';
+                } else {
+                    btn.textContent = 'HUNTING OFF';
+                    btn.className = 'px-8 py-3 rounded-xl font-bold text-white bg-red-600 text-lg shadow-lg';
+                    status.textContent = '⏸ AI is sleeping. Turn ON to start.';
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        async function toggleHunting() {
+            await fetch('/api/toggle_hunting', { method: 'POST' });
+            fetchHuntingState();
+        }
+
+        async function fetchData() {
+            try {
+                const accountsRes = await fetch('/api/get_accounts');
+                const accountsData = await accountsRes.json();
+                if (accountsData.status === 'success') {
+                    document.getElementById('accounts-count').textContent = accountsData.accounts.length;
+                }
+
+                const healthRes = await fetch('/api/health');
+                const healthData = await healthRes.json();
+                document.getElementById('proxies-count').textContent = healthData.working_proxies;
+                document.getElementById('live-task').textContent = healthData.task;
+                document.getElementById('live-detail').textContent = healthData.detail;
+                
+                // Update Activity Feed
+                const feed = document.getElementById('activity-feed');
+                if (healthData.detail && healthData.detail !== "Waiting...") {
+                     const newItem = document.createElement('div');
+                     newItem.className = "p-2 rounded bg-black/30 border border-gray-700 text-white";
+                     newItem.innerHTML = `<span class="text-accent font-mono text-xs">${new Date().toLocaleTimeString()}</span> - ${healthData.detail}`;
+                     if (feed.firstChild && feed.firstChild.innerText === "Waiting for activity...") {
+                         feed.innerHTML = ''; // Remove placeholder
+                     }
+                     feed.prepend(newItem);
+                     // Keep only last 20 items
+                     if (feed.children.length > 20) feed.removeChild(feed.lastChild);
+                }
+
+            } catch (e) { console.error(e); }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchHuntingState();
+            fetchData();
+            setInterval(fetchData, 3000); // Update every 3 seconds
+        });
+    </script>
 </body>
 </html>
