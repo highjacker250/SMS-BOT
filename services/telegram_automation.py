@@ -284,4 +284,4 @@ async def complete_user_login(phone_number, phone_code_hash, otp=None, password=
     except Exception as e:
         if app and app.is_connected: await app.disconnect()
         if phone_number in USER_LOGIN_CLIENTS: del USER_LOGIN_CLIENTS[phone_number]
-        return {"status": "failed", "reason": str(e)}2
+        return {"status": "failed", "reason": str(e)}
