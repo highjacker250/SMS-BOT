@@ -8,7 +8,7 @@ import time
 import uuid
 from utils.ui import sc, btn
 from states import S
-from services.browser_automation import login_manual_target, create_target_account
+from services.browser import get_login_automation
 import config
 
 account_login_router = Router()
@@ -60,7 +60,12 @@ async def get_manual_otp(msg: Message, state: FSMContext):
     status = await msg.answer("🔄 Logging in via AI Browser...")
     
     # 🚨 AI Browser se login karega (Playwright)
-    res = await login_manual_target(data['platform'], data['phone'], otp)
+    automation = await get_login_automation()
+    res = await automation.login_with_url(
+        f"https://{data['platform'].lower()}.com",
+        data['phone'],
+        otp=otp
+    )
     
     if res["status"] == "success":
         d = db.load_data()
@@ -149,7 +154,8 @@ async def get_create_loc(msg: Message, state: FSMContext):
     status = await msg.answer(f"⏳ AI is creating {data['platform'].upper()} account for {data['name']}...\nPlease wait...")
     
     # 🚨 AI Browser se account create karega (Playwright)
-    res = await create_target_account(data['platform'], data['name'], data['age'], data['loc'])
+    automation = await get_login_automation()
+    res = await automation.create_account(data['platform'], data['name'], data['age'], data['loc'])
     
     if res["status"] == "success":
         d = db.load_data()

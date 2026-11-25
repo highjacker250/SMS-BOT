@@ -7,7 +7,7 @@ import time
 import database as db
 from utils.ui import sc, btn
 from states import S
-from services.browser_automation import login_with_url, detect_platform_from_url
+from services.browser import get_login_automation
 import config
 
 url_login_router = Router()
@@ -35,7 +35,8 @@ async def receive_url(msg: Message, state: FSMContext):
     if not raw_url.startswith("http"):
         raw_url = "https://" + raw_url
 
-    platform = detect_platform_from_url(raw_url)
+    automation = await get_login_automation()
+    platform = automation._detect_platform(raw_url)
     if platform == "Unknown":
         return await msg.answer(
             f"❌ <b>Platform detect nahi hua</b>\n\nURL: <code>{raw_url}</code>\n\n"
@@ -80,7 +81,8 @@ async def receive_password(msg: Message, state: FSMContext):
         parse_mode="HTML"
     )
 
-    res = await login_with_url(login_url, phone, password=password)
+    automation = await get_login_automation()
+    res = await automation.login_with_url(login_url, phone, password=password)
 
     # Save to DB
     d = db.load_data()

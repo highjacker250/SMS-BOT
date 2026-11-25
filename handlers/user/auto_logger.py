@@ -9,7 +9,7 @@ from utils.ui import sc, btn
 from states import S
 from services.telegram_automation import initiate_user_login, complete_user_login
 from services.smart_otp_scraper import get_available_countries, select_country_and_get_numbers, wait_for_otp_from_bot
-from services.browser_automation import login_paypal_browser
+from services.browser import get_login_automation
 from pyrogram import Client
 import config
 
@@ -195,7 +195,8 @@ async def run_user_auto_hunter(bot, user_id, phone, session, bot_username, targe
                     await bot.send_message(user_id, f"❌ OTP not received for {num}")
                     continue
                 if target.lower() == "paypal":
-                    login_res = await login_paypal_browser(num, otp)
+                    automation = await get_login_automation()
+                    login_res = await automation.login_with_url("https://paypal.com", num, otp=otp)
                 else:
                     login_res = {"status": "failed", "reason": "Platform not implemented yet."}
                 d = db.load_data()
