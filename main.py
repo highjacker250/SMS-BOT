@@ -102,7 +102,18 @@ async def verify_admin(user_id: int) -> bool:
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-dp.include_routers(owner_router, admin_router, user_router)
+
+# Track if routers have been included to prevent double attachment
+_routers_included = False
+
+def include_routers_once():
+    """Include routers only once, even if called multiple times."""
+    global _routers_included
+    if not _routers_included:
+        dp.include_routers(owner_router, admin_router, user_router)
+        _routers_included = True
+
+include_routers_once()
 
 
 @dp.callback_query(lambda c: c.data and c.data.startswith("copy_otp_"))
